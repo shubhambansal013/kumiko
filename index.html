@@ -158,11 +158,6 @@
       <input type="color" id="jigumiColor" value="#e8e2d3">
       <span>Jigumi (grid line) color</span>
     </div>
-    <div class="checkrow">
-      <input type="checkbox" id="flipHalf">
-      <label for="flipHalf">Flip orientation of half triangles</label>
-    </div>
-    <div class="hint">Shifts the lattice by half a pitch, changing which edge triangles get cut in half along the border — matches the same toggle in Paper View.</div>
   </fieldset>
 
   <fieldset>
@@ -172,6 +167,16 @@
     <div class="gallery-actions">
       <button type="button" id="selectAllBtn">Select all</button>
       <button type="button" id="selectNoneBtn">Clear</button>
+    </div>
+    <div class="row2" style="margin-top:12px;">
+      <div>
+        <label>Pattern thickness (mm)</label>
+        <input type="number" id="patternThickness" placeholder="3" step="0.1">
+      </div>
+      <div>
+        <label>Backfill opacity</label>
+        <input type="number" id="backfillOpacity" value="0.5" min="0" max="1" step="0.1">
+      </div>
     </div>
     <label style="margin-top:12px;">Backfill color</label>
     <input type="color" id="backfillColor" value="#0a0908">
@@ -208,6 +213,19 @@ const downloadImgBtn = document.getElementById('downloadImgBtn');
 const downloadCsvBtn = document.getElementById('downloadCsvBtn');
 const patternSelect = document.getElementById('patternName');
 const patternCustom = document.getElementById('patternCustom');
+
+const mitsukeInput = document.getElementById('mitsuke');
+const patternThicknessInput = document.getElementById('patternThickness');
+
+function syncPatternThicknessPlaceholder() {
+  if (mitsukeInput && patternThicknessInput) {
+    patternThicknessInput.placeholder = mitsukeInput.value;
+  }
+}
+if (mitsukeInput) {
+  mitsukeInput.addEventListener('input', syncPatternThicknessPlaceholder);
+  syncPatternThicknessPlaceholder();
+}
 
 let sourceImg = null;
 let outputCanvas = null;
@@ -646,7 +664,7 @@ const patternDarknesses = REAL_PATTERNS.map((p, idx) => {
 });
 patternDarknesses.sort((a, b) => a.darkness - b.darkness);
 
-function drawMotif(ctx, w, h, fg, index, isInverted) {
+function drawMotif(ctx, w, h, fg, index, isInverted, thicknessPx) {
   const pat = REAL_PATTERNS[index];
   if (!pat) return;
 
@@ -658,10 +676,13 @@ function drawMotif(ctx, w, h, fg, index, isInverted) {
     ctx.translate(-w / 2, -h / 2);
   }
 
-  ctx.scale(w / pat.w, h / pat.h);
+  const scaleX = w / pat.w;
+  const scaleY = h / pat.h;
+  ctx.scale(scaleX, scaleY);
 
   ctx.strokeStyle = fg;
-  ctx.lineWidth = 1.5;
+  // Apply exact pattern thickness. Since context is scaled by scaleX, we divide the thicknessPx by scaleX
+  ctx.lineWidth = thicknessPx ? (thicknessPx / scaleX) : 1.5;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   pat.paths.forEach(d => {
@@ -671,15 +692,31 @@ function drawMotif(ctx, w, h, fg, index, isInverted) {
   ctx.restore();
 }
 
-function paintPatternTile(ctx, index, x0, y0, w, h, fgColor, bgColor, isInverted) {
+function paintPatternTile(ctx, index, x0, y0, w, h, fgColor, bgColor, isInverted, opacity, thicknessPx) {
   ctx.save();
   ctx.translate(x0, y0);
-  ctx.fillStyle = bgColor;
+
+  // Convert hex background color to RGBA using specified opacity
+  let r = 10, g = 9, b = 8; // Default #0a0908
+  if (bgColor.startsWith('#')) {
+    const hex = bgColor.slice(1);
+    if (hex.length === 6) {
+      r = parseInt(hex.slice(0, 2), 16);
+      g = parseInt(hex.slice(2, 4), 16);
+      b = parseInt(hex.slice(4, 6), 16);
+    } else if (hex.length === 3) {
+      r = parseInt(hex[0] + hex[0], 16);
+      g = parseInt(hex[1] + hex[1], 16);
+      b = parseInt(hex[2] + hex[2], 16);
+    }
+  }
+  ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
   ctx.fillRect(0, 0, w, h);
+
   ctx.beginPath();
   ctx.rect(0, 0, w, h);
   ctx.clip();
-  drawMotif(ctx, w, h, fgColor, index - 1, isInverted);
+  drawMotif(ctx, w, h, fgColor, index - 1, isInverted, thicknessPx);
   ctx.restore();
 }
 
@@ -872,7 +909,7 @@ processBtn.addEventListener('click', () => {
   const frameWidthMM = parseFloat(document.getElementById('frameWidth').value) || 0;
   const frameColor = document.getElementById('frameColor').value;
   const jigumiColor = document.getElementById('jigumiColor').value;
-  const flipHalf = document.getElementById('flipHalf').checked;
+  const flipHalf = (sizeB % 2 === 0);
 
   const patternName = "Kumiko Pattern Map";
 
@@ -910,6 +947,14 @@ processBtn.addEventListener('click', () => {
   // inner background (in case triangles don't fully cover due to rounding)
   octx.fillStyle = jigumiColor;
   octx.fillRect(frameWidthPx, frameWidthPx, innerWpx, innerHpx);
+
+  // draw the original image onto the outputCanvas as the first layer under the triangles
+  octx.save();
+  octx.beginPath();
+  octx.rect(frameWidthPx, frameWidthPx, innerWpx, innerHpx);
+  octx.clip();
+  octx.drawImage(sourceImg, 0, 0, W, H);
+  octx.restore();
 
   const rawTriangles = buildTriangles(innerWpx, innerHpx, pitchPx, flipHalf);
   const backfillColor = document.getElementById('backfillColor').value;
@@ -956,7 +1001,13 @@ processBtn.addEventListener('click', () => {
       const bucketSize = 1 / activePatterns.length;
       const bucketIdx = Math.min(activePatterns.length - 1, Math.floor(avgDarkness / bucketSize));
       const pIndex = activePatterns[bucketIdx].index;
-      paintPatternTile(octx, pIndex + 1, minX, minY, Math.max(1,maxX-minX), Math.max(1,maxY-minY), colorInfo.hex, backfillColor, isInverted);
+      const customThicknessVal = parseFloat(document.getElementById('patternThickness').value);
+      const chosenThickness = isNaN(customThicknessVal) ? mitsuke : customThicknessVal;
+      const thicknessPx = chosenThickness * pxPerMM;
+      const opacityVal = parseFloat(document.getElementById('backfillOpacity').value);
+      const opacity = isNaN(opacityVal) ? 0.5 : opacityVal;
+
+      paintPatternTile(octx, pIndex + 1, minX, minY, Math.max(1,maxX-minX), Math.max(1,maxY-minY), colorInfo.hex, backfillColor, isInverted, opacity, thicknessPx);
     } else {
       octx.fillStyle = colorInfo.hex;
       octx.fillRect(minX, minY, maxX-minX, maxY-minY);
