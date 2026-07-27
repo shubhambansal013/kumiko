@@ -15,6 +15,9 @@ jobs:
     runs-on: ubuntu-latest
     name: Deploy to Cloudflare Pages
     environment: prod
+    permissions:
+      contents: read
+      deployments: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
