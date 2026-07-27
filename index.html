@@ -18,7 +18,8 @@
     color:var(--ink);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
     display:flex;
-    min-height:100vh;
+    height:100vh;
+    overflow:hidden;
   }
   aside{
     width:360px;
@@ -26,9 +27,10 @@
     background:var(--panel);
     border-right:1px solid var(--line);
     padding:22px 20px 40px;
+    height:100%;
     overflow-y:auto;
   }
-  main{ flex:1; padding:22px 26px; overflow:auto; }
+  main{ flex:1; padding:22px 26px; height:100%; overflow:auto; }
   h1{ font-size:1rem; margin:0 0 2px; font-weight:600; }
   .tag{ font-size:0.72rem; color:#8a8378; margin-bottom:20px; display:block; }
   fieldset{ border:none; padding:0; margin:0 0 20px; }
@@ -138,6 +140,7 @@
     <input type="number" id="frameWidth" value="6" step="0.1">
     <div class="colorpair">
       <input type="color" id="frameColor" value="#3a332c">
+      <input type="text" id="frameColorHex" value="#3a332c" style="width: 80px; margin-left: 5px; text-transform: uppercase;">
       <span>Frame color</span>
     </div>
   </fieldset>
@@ -156,6 +159,7 @@
     </div>
     <div class="colorpair">
       <input type="color" id="jigumiColor" value="#e8e2d3">
+      <input type="text" id="jigumiColorHex" value="#e8e2d3" style="width: 80px; margin-left: 5px; text-transform: uppercase;">
       <span>Jigumi (grid line) color</span>
     </div>
   </fieldset>
@@ -179,12 +183,15 @@
       </div>
     </div>
     <label style="margin-top:12px;">Backfill color</label>
-    <input type="color" id="backfillColor" value="#0a0908">
+    <div class="colorpair">
+      <input type="color" id="backfillColor" value="#0a0908">
+      <input type="text" id="backfillColorHex" value="#0a0908" style="width: 80px; text-transform: uppercase;">
+    </div>
     <div class="hint">Fills the space behind the pattern lines inside each triangle (defaults to black).</div>
   </fieldset>
 
   <fieldset>
-    <legend>5. Visibility Options</legend>
+    <legend>5. Visibility & Color Options</legend>
     <div class="checkrow">
       <input type="checkbox" id="showImage" checked>
       <label for="showImage">Show original image</label>
@@ -192,6 +199,11 @@
     <div class="checkrow">
       <input type="checkbox" id="showPattern" checked>
       <label for="showPattern">Show Kumiko pattern</label>
+    </div>
+    <div style="margin-top: 10px;">
+      <label for="maxColors">Max colors (K-means)</label>
+      <input type="number" id="maxColors" value="4" min="1" max="64">
+      <div class="hint">Reduces the variation of dynamically determined triangle colors to match the user input.</div>
     </div>
   </fieldset>
 
@@ -235,6 +247,38 @@ if (mitsukeInput) {
 let sourceImg = null;
 let outputCanvas = null;
 let lastCounts = null;
+
+// Helper to setup bidirectional color syncing with support for hex validation
+function setupColorSync(colorId, hexId) {
+  const colorInput = document.getElementById(colorId);
+  const hexInput = document.getElementById(hexId);
+
+  colorInput.addEventListener('input', (e) => {
+    hexInput.value = e.target.value.toUpperCase();
+    if (sourceImg) processBtn.click();
+  });
+
+  hexInput.addEventListener('input', (e) => {
+    let value = e.target.value.trim();
+    if (!value.startsWith('#')) {
+      value = '#' + value;
+    }
+    // Validate hex format (either #333 or #666666)
+    const validHex = /^#[0-9A-F]{6}$/i.test(value) || /^#[0-9A-F]{3}$/i.test(value);
+    if (validHex) {
+      // If 3 digit hex, expand it so the color input can accept it correctly
+      if (value.length === 4) {
+        value = '#' + value[1] + value[1] + value[2] + value[2] + value[3] + value[3];
+      }
+      colorInput.value = value;
+      if (sourceImg) processBtn.click();
+    }
+  });
+}
+
+setupColorSync('frameColor', 'frameColorHex');
+setupColorSync('jigumiColor', 'jigumiColorHex');
+setupColorSync('backfillColor', 'backfillColorHex');
 
 function rgbToHex(r, g, b) {
   const toHex = c => {
@@ -854,6 +898,69 @@ function polygonBoundsAndAvgColor(poly, imgData, w, h){
   return {r:rSum/n,g:gSum/n,b:bSum/n};
 }
 
+// Deterministic K-means clustering for color reduction
+function performKMeans(colors, k) {
+  if (!colors || colors.length === 0) return [];
+  if (colors.length <= k) {
+    return colors.map(c => ({r: c.r, g: c.g, b: c.b}));
+  }
+
+  // Choose deterministic initial centroids evenly spaced out in the colors array
+  let centroids = [];
+  const step = Math.floor(colors.length / k);
+  for (let i = 0; i < k; i++) {
+    const idx = Math.min(colors.length - 1, i * step);
+    centroids.push({ r: colors[idx].r, g: colors[idx].g, b: colors[idx].b });
+  }
+
+  let iterations = 20;
+  let assignments = new Array(colors.length);
+
+  for (let iter = 0; iter < iterations; iter++) {
+    let changed = false;
+    // Assign colors to nearest centroids
+    for (let i = 0; i < colors.length; i++) {
+      const c = colors[i];
+      let minDist = Infinity;
+      let minIdx = 0;
+      for (let j = 0; j < centroids.length; j++) {
+        const centroid = centroids[j];
+        const dist = (c.r - centroid.r) ** 2 + (c.g - centroid.g) ** 2 + (c.b - centroid.b) ** 2;
+        if (dist < minDist) {
+          minDist = dist;
+          minIdx = j;
+        }
+      }
+      if (assignments[i] !== minIdx) {
+        assignments[i] = minIdx;
+        changed = true;
+      }
+    }
+
+    if (!changed) break;
+
+    // Recalculate centroids
+    let sums = Array.from({ length: k }, () => ({ r: 0, g: 0, b: 0, count: 0 }));
+    for (let i = 0; i < colors.length; i++) {
+      const ass = assignments[i];
+      sums[ass].r += colors[i].r;
+      sums[ass].g += colors[i].g;
+      sums[ass].b += colors[i].b;
+      sums[ass].count++;
+    }
+
+    for (let j = 0; j < k; j++) {
+      if (sums[j].count > 0) {
+        centroids[j].r = sums[j].r / sums[j].count;
+        centroids[j].g = sums[j].g / sums[j].count;
+        centroids[j].b = sums[j].b / sums[j].count;
+      }
+    }
+  }
+
+  return centroids;
+}
+
 // Build the real equilateral-triangle asanoha-style lattice (rotated 90 degrees)
 function buildTriangles(innerW, innerH, pitch, flipHalf){
   const colH = pitch * Math.sqrt(3)/2;
@@ -952,7 +1059,8 @@ processBtn.addEventListener('click', () => {
     octx.drawImage(sourceImg, 0, 0, W, H);
     octx.restore();
   } else {
-    octx.fillStyle = jigumiColor;
+    // Changing jigumi color shouldn't affect the background fill of the grid - use white #ffffff instead of jigumiColor
+    octx.fillStyle = "#ffffff";
     octx.fillRect(frameWidthPx, frameWidthPx, innerWpx, innerHpx);
   }
 
@@ -960,22 +1068,49 @@ processBtn.addEventListener('click', () => {
   const backfillColor = document.getElementById('backfillColor').value;
   const patternList = Array.from(selectedPatterns.values());
 
+  // Step 1: Pre-process raw triangles to collect averages for K-means clustering
+  const processedTriangles = [];
+  rawTriangles.forEach(tri => {
+    const clipped = clipPolygonToRect(tri, innerWpx, innerHpx);
+    if (clipped.length < 3) return;
+    const avg = polygonBoundsAndAvgColor(
+      clipped.map(p => ({ x: p.x + frameWidthPx, y: p.y + frameWidthPx })),
+      imgData, W, H
+    );
+    if (!avg) return;
+    processedTriangles.push({ tri, clipped, avg });
+  });
+
+  // Step 2: Perform K-means color clustering if K is specified
+  const maxColorsInput = parseInt(document.getElementById('maxColors').value) || 4;
+  const centroids = performKMeans(processedTriangles.map(pt => pt.avg), maxColorsInput);
+
+  // Map each triangle's avg color to the closest centroid
+  processedTriangles.forEach(pt => {
+    if (centroids.length > 0) {
+      let bestCentroid = centroids[0];
+      let minDist = Infinity;
+      centroids.forEach(cent => {
+        const dist = (pt.avg.r - cent.r) ** 2 + (pt.avg.g - cent.g) ** 2 + (pt.avg.b - cent.b) ** 2;
+        if (dist < minDist) {
+          minDist = dist;
+          bestCentroid = cent;
+        }
+      });
+      pt.avg.r = bestCentroid.r;
+      pt.avg.g = bestCentroid.g;
+      pt.avg.b = bestCentroid.b;
+    }
+  });
+
   const counts = {};
   let totalPieces = 0;
 
   octx.save();
   octx.translate(frameWidthPx, frameWidthPx);
 
-  rawTriangles.forEach(tri => {
-    const clipped = clipPolygonToRect(tri, innerWpx, innerHpx);
-    if(clipped.length < 3) return;
-    const avg = polygonBoundsAndAvgColor(
-      clipped.map(p=>({x:p.x+frameWidthPx, y:p.y+frameWidthPx})),
-      imgData, W, H
-    );
-    if(!avg) return;
-
-    // Use dynamic average color
+  processedTriangles.forEach(({ tri, clipped, avg }) => {
+    // Use dynamic average color (which is now K-means clustered)
     const hexColor = rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b));
 
     // bounding box of this triangle, for the pattern tile
@@ -1009,7 +1144,7 @@ processBtn.addEventListener('click', () => {
       const opacity = isNaN(opacityVal) ? 0.5 : opacityVal;
 
       paintPatternTile(octx, pNum, minX, minY, Math.max(1,maxX-minX), Math.max(1,maxY-minY), hexColor, backfillColor, isInverted, opacity, thicknessPx, true);
-    } else if (!showPattern || pNum === 0) {
+    } else if (showPattern && pNum === 0) {
       if (!showImage) {
         octx.fillStyle = hexColor;
         octx.fillRect(minX, minY, maxX-minX, maxY-minY);
