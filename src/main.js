@@ -474,6 +474,9 @@ function handleColorChange(key, newColor) {
 
   const wrap = canvasArea.querySelector('.canvas-wrap');
   applyZoomStyle(outputCanvas, wrap);
+
+  // Re-render results table to update UI (color inputs, reset buttons)
+  renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, currentZoomLevel, downloadImgBtn, downloadCsvBtn, userColorOverrides, originalColorMap, originalColorByPattern });
 }
 
 downloadImgBtn.addEventListener('click', () => {
