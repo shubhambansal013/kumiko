@@ -93,6 +93,10 @@ fileInput.addEventListener('change', (e) => {
   reader.readAsDataURL(file);
 });
 
+function processingDebug(label, data) {
+  if (location.search.includes('debug')) console.log(`[kumiko-debug] ${label}:`, data);
+}
+
 processBtn.addEventListener('click', async () => {
   if (!sourceImg) return;
 
@@ -103,6 +107,8 @@ processBtn.addEventListener('click', async () => {
   const frameWidthMM = parseFloat(document.getElementById('frameWidth').value) || 0;
   const frameColor = document.getElementById('frameColor').value;
   const jigumiColor = document.getElementById('jigumiColor').value;
+
+  processingDebug('params', { sizeA, sizeB, pitch, mitsuke, frameWidthMM });
 
   const patternName = "Kumiko Pattern Map";
 
@@ -124,6 +130,8 @@ processBtn.addEventListener('click', async () => {
   const patternLinePx = mitsukePx * 0.8;
   const innerWpx = innerWidthMM * pxPerMM;
   const innerHpx = innerHeightMM * pxPerMM;
+
+  processingDebug('dimensions', { innerWpx, innerHpx, W, H, W_sample, H_sample, pxPerMM, frameWidthPx, patternLinePx, s });
 
   const srcCanvas = document.createElement('canvas');
   srcCanvas.width = W_sample; srcCanvas.height = H_sample;
@@ -160,6 +168,7 @@ processBtn.addEventListener('click', async () => {
 
   const backfillColor = document.getElementById('backfillColor').value;
   const activePatterns = sortPatternsByDensity(Array.from(selectedPatterns.values()), patternLinePx);
+  processingDebug('activePatterns (by density)', activePatterns);
 
   const gridTriangles = generateLockedGrid(
     innerWpx, innerHpx, sizeB, sizeA,
@@ -251,6 +260,16 @@ processBtn.addEventListener('click', async () => {
   }
 
   octx.restore();
+
+  processingDebug('distribution', Object.fromEntries(
+    [...new Set(processedTriangles.map(t => t.pattern || 'flat'))].map(k => [k, processedTriangles.filter(x => (x.pattern || 'flat') === k).length])
+  ));
+  const lightnesses = processedTriangles.map(t => t.t?.lightness).filter(l => l !== undefined);
+  if (lightnesses.length) {
+    const sortedL = [...lightnesses].sort((a, b) => a - b);
+    const sum = sortedL.reduce((a, b) => a + b, 0);
+    processingDebug('lightness', { min: sortedL[0], max: sortedL[sortedL.length - 1], avg: sum / sortedL.length, count: sortedL.length });
+  }
 
   lastCounts = {
     counts, patternName, sizeA, sizeB, total: totalPieces,
