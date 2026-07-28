@@ -119,7 +119,7 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
             vertices: [a, b, d],
             center: { x: cx, y: cy },
             col, row: k,
-            isInverted: false,
+            isInverted: true,
             lightness,
             pattern,
           });
@@ -142,7 +142,7 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
             vertices: [a, b, d],
             center: { x: cx, y: cy },
             col, row: k,
-            isInverted: true,
+            isInverted: false,
             lightness,
             pattern,
           });
