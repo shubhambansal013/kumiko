@@ -527,3 +527,243 @@ describe('grid: custom pitch', () => {
     }
   });
 });
+
+// ── isInverted consistency (regression: even-column swap bug) ───────
+
+describe('grid: isInverted consistency across columns', () => {
+  function getTriangleDirection(tri) {
+    const xs = tri.vertices.map(v => v.x);
+    const baseX = xs.find(x => xs.filter(xx => Math.abs(xx - x) < EPSILON).length === 2);
+    const apex = tri.vertices.find(v => Math.abs(v.x - baseX) > EPSILON);
+    return apex.x > baseX ? 'right' : 'left';
+  }
+
+  for (const numCols of [5, 6, 10, 20, 21, 42]) {
+    it(`numCols=${numCols}: same direction always gets same isInverted`, () => {
+      const tris = makeGrid(numCols, 8);
+      const rightInverted = tris.filter(t => getTriangleDirection(t) === 'right').map(t => t.isInverted);
+      const leftInverted = tris.filter(t => getTriangleDirection(t) === 'left').map(t => t.isInverted);
+      expect(rightInverted.length).toBeGreaterThan(0);
+      expect(leftInverted.length).toBeGreaterThan(0);
+      expect(rightInverted.every(v => v === rightInverted[0])).toBe(true);
+      expect(leftInverted.every(v => v === leftInverted[0])).toBe(true);
+    });
+  }
+
+  it('right-pointing and left-pointing have opposite isInverted', () => {
+    const tris = makeGrid(10, 8);
+    const rightSample = tris.find(t => getTriangleDirection(t) === 'right');
+    const leftSample = tris.find(t => getTriangleDirection(t) === 'left');
+    expect(rightSample).toBeDefined();
+    expect(leftSample).toBeDefined();
+    expect(rightSample.isInverted).not.toBe(leftSample.isInverted);
+  });
+
+  it('numCols=1: has both directions with consistent isInverted', () => {
+    const tris = makeGrid(1, 5);
+    const rightTris = tris.filter(t => getTriangleDirection(t) === 'right');
+    const leftTris = tris.filter(t => getTriangleDirection(t) === 'left');
+    expect(rightTris.length).toBeGreaterThan(0);
+    expect(leftTris.length).toBeGreaterThan(0);
+    expect(rightTris.every(t => t.isInverted === rightTris[0].isInverted)).toBe(true);
+    expect(leftTris.every(t => t.isInverted === leftTris[0].isInverted)).toBe(true);
+    expect(rightTris[0].isInverted).not.toBe(leftTris[0].isInverted);
+  });
+
+  it('numCols=2: both directions present with correct isInverted', () => {
+    const tris = makeGrid(2, 5);
+    const rightTris = tris.filter(t => getTriangleDirection(t) === 'right');
+    const leftTris = tris.filter(t => getTriangleDirection(t) === 'left');
+    expect(rightTris.length).toBeGreaterThan(0);
+    expect(leftTris.length).toBeGreaterThan(0);
+    expect(rightTris.every(t => t.isInverted === rightTris[0].isInverted)).toBe(true);
+    expect(leftTris.every(t => t.isInverted === leftTris[0].isInverted)).toBe(true);
+    expect(rightTris[0].isInverted).not.toBe(leftTris[0].isInverted);
+  });
+});
+
+// ── Adjacent triangles share edges with opposite isInverted ──────────
+
+describe('grid: adjacent triangles have opposite isInverted', () => {
+  function verticesMatch(a, b) {
+    return Math.abs(a.x - b.x) < EPSILON && Math.abs(a.y - b.y) < EPSILON;
+  }
+
+  function shareEdge(t1, t2) {
+    let shared = 0;
+    for (const v1 of t1.vertices) {
+      for (const v2 of t2.vertices) {
+        if (verticesMatch(v1, v2)) { shared++; break; }
+      }
+    }
+    return shared === 2;
+  }
+
+  it('every pair of triangles sharing an edge has opposite isInverted', () => {
+    const tris = makeGrid(8, 6);
+    for (let i = 0; i < tris.length; i++) {
+      for (let j = i + 1; j < tris.length; j++) {
+        if (shareEdge(tris[i], tris[j])) {
+          expect(tris[i].isInverted).not.toBe(tris[j].isInverted);
+        }
+      }
+    }
+  });
+
+  it('same for even numCols', () => {
+    const tris = makeGrid(7, 6);
+    for (let i = 0; i < tris.length; i++) {
+      for (let j = i + 1; j < tris.length; j++) {
+        if (shareEdge(tris[i], tris[j])) {
+          expect(tris[i].isInverted).not.toBe(tris[j].isInverted);
+        }
+      }
+    }
+  });
+});
+
+// ── Tiling completeness ─────────────────────────────────────────────
+
+describe('grid: inner area is fully tiled', () => {
+  function pointInTriangle(p, v) {
+    const [a, b, c] = v;
+    const d1 = (p.x - b.x) * (a.y - b.y) - (a.x - b.x) * (p.y - b.y);
+    const d2 = (p.x - c.x) * (b.y - c.y) - (b.x - c.x) * (p.y - c.y);
+    const d3 = (p.x - a.x) * (c.y - a.y) - (c.x - a.x) * (p.y - a.y);
+    const hasNeg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+    const hasPos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+    return !(hasNeg && hasPos);
+  }
+
+  it('sample points inside inner area are covered by some triangle', () => {
+    const numCols = 8;
+    const numRows = 6;
+    const { innerW, innerH } = gridDims(numCols, numRows);
+    const tris = makeGrid(numCols, numRows);
+    const step = PITCH / 4;
+    for (let x = step; x < innerW - step; x += step) {
+      for (let y = step; y < innerH - step; y += step) {
+        const covered = tris.some(t => pointInTriangle({ x, y }, t.vertices));
+        expect(covered).toBe(true);
+      }
+    }
+  });
+
+  it('no overlapping triangle interiors', () => {
+    const tris = makeGrid(5, 4);
+    const centroids = tris.map(t => t.center);
+    for (let i = 0; i < tris.length; i++) {
+      let insideAnother = false;
+      for (let j = 0; j < tris.length; j++) {
+        if (i === j) continue;
+        if (pointInTriangle(centroids[i], tris[j].vertices)) {
+          insideAnother = true;
+          break;
+        }
+      }
+      expect(insideAnother).toBe(false);
+    }
+  });
+});
+
+// ── Triangle bounding box matches vertices ──────────────────────────
+
+describe('grid: triangle properties', () => {
+  it('every triangle has col and row properties', () => {
+    const tris = makeGrid(10, 8);
+    for (const tri of tris) {
+      expect(typeof tri.col).toBe('number');
+      expect(typeof tri.row).toBe('number');
+      expect(tri.col).toBeGreaterThanOrEqual(0);
+      expect(tri.row).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('every triangle has lightness property in [0, 1]', () => {
+    const tris = makeGrid(10, 8);
+    for (const tri of tris) {
+      expect(typeof tri.lightness).toBe('number');
+      expect(tri.lightness).toBeGreaterThanOrEqual(-EPSILON);
+      expect(tri.lightness).toBeLessThanOrEqual(1 + EPSILON);
+    }
+  });
+
+  it('triangle side lengths match pitch across different pitches', () => {
+    for (const pitch of [20, 30, 50, 75, 100]) {
+      const tris = makeGrid(6, 4, pitch);
+      for (const tri of tris) {
+        expect(isEquilateral(tri.vertices)).toBe(true);
+        for (const s of triangleSides(tri.vertices)) {
+          expect(Math.abs(s - pitch)).toBeLessThan(1e-6);
+        }
+      }
+    }
+  });
+});
+
+// ── Default UI parameters ───────────────────────────────────────────
+
+describe('grid: default UI parameters (sizeA=20, sizeB=42, pitch=50)', () => {
+  it('produces correct number of triangles', () => {
+    const numCols = 42;
+    const numRows = 20;
+    const tris = makeGrid(numCols, numRows);
+    expect(tris.length).toBeGreaterThan(0);
+    for (const tri of tris) {
+      expect(isEquilateral(tri.vertices)).toBe(true);
+    }
+  });
+
+  it('all triangles have valid isInverted', () => {
+    const tris = makeGrid(42, 20);
+    for (const tri of tris) {
+      expect(typeof tri.isInverted).toBe('boolean');
+    }
+  });
+});
+
+// ── Column parity and flipFirst ─────────────────────────────────────
+
+describe('grid: column parity', () => {
+  it('odd numCols: col 0 is even-parity (vertices at y = 0, h, 2h, ...)', () => {
+    const tris = makeGrid(5, 5);
+    // For odd numCols (flipFirst=false), col 0 is even-parity
+    // Right-pointing triangles: [left[k], left[k+1], right[k+1]], left=vertices[0] at y=k*h
+    const col0Right = tris.filter(t => t.col === 0 && t.isInverted);
+    expect(col0Right.length).toBeGreaterThan(0);
+    for (const tri of col0Right) {
+      const ys = tri.vertices.map(v => v.y).sort((a, b) => a - b);
+      expect(ys[0]).toBeGreaterThanOrEqual(-EPSILON);
+    }
+  });
+
+  it('even numCols: col 0 is odd-parity (vertices at y = -h/2, h/2, ...)', () => {
+    const tris = makeGrid(6, 5);
+    const col0 = tris.filter(t => t.col === 0);
+    const allYs = col0.flatMap(t => t.vertices.map(v => v.y));
+    const minY = Math.min(...allYs);
+    expect(minY).toBeLessThan(-EPSILON);
+    expect(Math.abs(minY + PITCH / 2)).toBeLessThan(EPSILON);
+  });
+
+  it('odd numCols: col 1 is odd-parity (vertices at y = -h/2, h/2, ...)', () => {
+    const tris = makeGrid(5, 5);
+    const col1 = tris.filter(t => t.col === 1);
+    const allYs = col1.flatMap(t => t.vertices.map(v => v.y));
+    const minY = Math.min(...allYs);
+    expect(minY).toBeLessThan(-EPSILON);
+    expect(Math.abs(minY + PITCH / 2)).toBeLessThan(EPSILON);
+  });
+
+  it('even numCols: col 1 is even-parity (vertices at y = 0, h, 2h, ...)', () => {
+    const tris = makeGrid(6, 5);
+    // For even numCols (flipFirst=true), col 1 is even-parity
+    // Right-pointing triangles: [left[k], left[k+1], right[k+1]], left=vertices[1] at y=k*h
+    const col1Right = tris.filter(t => t.col === 1 && t.isInverted);
+    expect(col1Right.length).toBeGreaterThan(0);
+    for (const tri of col1Right) {
+      const ys = tri.vertices.map(v => v.y).sort((a, b) => a - b);
+      expect(ys[0]).toBeGreaterThanOrEqual(-EPSILON);
+    }
+  });
+});
