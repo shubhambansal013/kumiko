@@ -409,16 +409,17 @@ export function buildPatternSvg(index, w, h, fgColor, bgColor, isInverted, lineW
   const pat = REAL_PATTERNS[index - 1];
   if (!pat) return '';
 
-  const scaleX = w / pat.w;
-  const scaleY = h / pat.h;
+  const scale = Math.min(w / pat.w, h / pat.h);
+  const dw = Math.round(pat.w * scale);
+  const dh = Math.round(pat.h * scale);
 
   let pathsSvg = '';
   pat.paths.forEach(d => {
     const transforms = [];
     if (isInverted) {
-      transforms.push(`translate(${w / 2} ${h / 2}) rotate(180) translate(${-w / 2} ${-h / 2})`);
+      transforms.push(`translate(${dw / 2} ${dh / 2}) rotate(180) translate(${-dw / 2} ${-dh / 2})`);
     }
-    transforms.push(`scale(${scaleX} ${scaleY})`);
+    transforms.push(`scale(${scale} ${scale})`);
     pathsSvg += `<path d="${d}" fill="none" stroke="${fgColor}" stroke-width="${lineWidth}" stroke-linecap="round" stroke-linejoin="round" transform="${transforms.join(' ')}"`;
     pathsSvg += `/>`;
   });
@@ -431,8 +432,8 @@ export function buildPatternSvg(index, w, h, fgColor, bgColor, isInverted, lineW
     return `rgba(${r},${g},${b},${alpha})`;
   };
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">`
-    + `<rect width="${w}" height="${h}" fill="${hexToRgba(bgColor, 1)}"/>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${dw} ${dh}" width="${dw}" height="${dh}">`
+    + `<rect width="${dw}" height="${dh}" fill="${hexToRgba(bgColor, 1)}"/>`
     + pathsSvg
     + `</svg>`;
 }

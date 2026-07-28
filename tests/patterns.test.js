@@ -84,10 +84,15 @@ describe('patterns: buildPatternSvg', () => {
   });
 
   it('includes viewBox with correct dimensions', () => {
-    const svg = buildPatternSvg(1, 100, 80, '#000', '#fff', false, 12);
-    expect(svg).toContain('viewBox="0 0 100 80"');
-    expect(svg).toContain('width="100"');
-    expect(svg).toContain('height="80"');
+    const pat = REAL_PATTERNS[0];
+    const w = 100, h = 80;
+    const scale = Math.min(w / pat.w, h / pat.h);
+    const dw = Math.round(pat.w * scale);
+    const dh = Math.round(pat.h * scale);
+    const svg = buildPatternSvg(1, w, h, '#000', '#fff', false, 12);
+    expect(svg).toContain(`viewBox="0 0 ${dw} ${dh}"`);
+    expect(svg).toContain(`width="${dw}"`);
+    expect(svg).toContain(`height="${dh}"`);
   });
 
   it('inverted flag adds rotate(180) transform', () => {
@@ -109,13 +114,12 @@ describe('patterns: buildPatternSvg', () => {
     expect(svg1).not.toBe(svg2);
   });
 
-  it('scaling factor matches tile dimensions', () => {
+  it('scaling factor is uniform', () => {
     const pat = REAL_PATTERNS[0];
     const w = 50, h = 43.3;
     const svg = buildPatternSvg(1, w, h, '#000', '#fff', false, 12);
-    const expectedScaleX = w / pat.w;
-    const expectedScaleY = h / pat.h;
-    expect(svg).toContain(`scale(${expectedScaleX} ${expectedScaleY})`);
+    const expectedScale = Math.min(w / pat.w, h / pat.h);
+    expect(svg).toContain(`scale(${expectedScale} ${expectedScale})`);
   });
 });
 
@@ -124,7 +128,11 @@ describe('patterns: buildPatternSvg', () => {
 describe('patterns: buildPatternSvg centering', () => {
   function parseScale(svg) {
     const m = svg.match(/scale\(([\d.e+-]+) ([\d.e+-]+)\)/);
-    return m ? [parseFloat(m[1]), parseFloat(m[2])] : null;
+    if (!m) {
+      const m2 = svg.match(/scale\(([\d.e+-]+)\)/);
+      return m2 ? [parseFloat(m2[1]), parseFloat(m2[1])] : null;
+    }
+    return [parseFloat(m[1]), parseFloat(m[2])];
   }
 
   function parseViewBox(svg) {
@@ -135,17 +143,11 @@ describe('patterns: buildPatternSvg centering', () => {
   it('scaled pattern fits exactly within viewBox for square tiles', () => {
     for (let i = 1; i <= NUM_PATTERNS; i++) {
       const svg = buildPatternSvg(i, 90, 90, '#000', '#fff', false, 12);
-      const [sx, sy] = parseScale(svg);
+      const [sx] = parseScale(svg);
       const [vw, vh] = parseViewBox(svg);
       const pat = REAL_PATTERNS[i - 1];
-      // scaled content extents
-      const maxX = pat.w * sx;
-      const maxY = pat.h * sy;
-      expect(maxX).toBeLessThanOrEqual(vw + 0.1);
-      expect(maxY).toBeLessThanOrEqual(vh + 0.1);
-      // content should fill viewBox (not be shifted or undersized)
-      expect(maxX).toBeGreaterThanOrEqual(vw - 0.1);
-      expect(maxY).toBeGreaterThanOrEqual(vh - 0.1);
+      expect(Math.abs(pat.w * sx - vw)).toBeLessThan(0.5);
+      expect(Math.abs(pat.h * sx - vh)).toBeLessThan(0.5);
     }
   });
 
@@ -154,11 +156,12 @@ describe('patterns: buildPatternSvg centering', () => {
     for (const [w, h] of sizes) {
       for (let i = 1; i <= NUM_PATTERNS; i++) {
         const svg = buildPatternSvg(i, w, h, '#000', '#fff', false, 12);
-        const [sx, sy] = parseScale(svg);
+        const [sx] = parseScale(svg);
         const [vw, vh] = parseViewBox(svg);
         const pat = REAL_PATTERNS[i - 1];
-        expect(pat.w * sx).toBeLessThanOrEqual(vw + 0.1);
-        expect(pat.h * sy).toBeLessThanOrEqual(vh + 0.1);
+        // viewBox is rounded to integers; allow 1px slack
+        expect(pat.w * sx).toBeLessThanOrEqual(vw + 1);
+        expect(pat.h * sx).toBeLessThanOrEqual(vh + 1);
       }
     }
   });

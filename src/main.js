@@ -1,6 +1,6 @@
 import './style.css';
 import { DEFAULT_IMAGE_B64 } from './default-image.js';
-import { rgbToHex } from './utils.js';
+import { rgbToHex, kMeansCluster, nearestCentroid } from './utils.js';
 import { polygonBoundsAndAvgColor } from './geometry.js';
 import { generateLockedGrid } from './grid.js';
 import { paintPatternTile, sortPatternsByDensity } from './patterns.js';
@@ -130,6 +130,7 @@ processBtn.addEventListener('click', async () => {
   const patternLinePx = mitsukePx * 0.8;
   const innerWpx = innerWidthMM * pxPerMM;
   const innerHpx = innerHeightMM * pxPerMM;
+  const s = W_sample / W;
 
   processingDebug('dimensions', { innerWpx, innerHpx, W, H, W_sample, H_sample, pxPerMM, frameWidthPx, patternLinePx, s });
 
@@ -138,7 +139,6 @@ processBtn.addEventListener('click', async () => {
   const sctx = srcCanvas.getContext('2d');
   const fitMode = document.getElementById('imageFit').value;
   const r = getImageCrop(sourceImg.naturalWidth, sourceImg.naturalHeight, innerWpx, innerHpx, fitMode);
-  const s = W_sample / W;
   sctx.fillStyle = '#ffffff';
   sctx.fillRect(0, 0, W_sample, H_sample);
   sctx.drawImage(sourceImg, r.sx, r.sy, r.sw, r.sh, (frameWidthPx + r.dx) * s, (frameWidthPx + r.dy) * s, r.dw * s, r.dh * s);
@@ -198,6 +198,17 @@ processBtn.addEventListener('click', async () => {
       avg,
       isPatterned: t.pattern !== null,
     });
+  }
+
+  const numColors = Math.max(1, parseInt(document.getElementById('numInsertColors').value) || 3);
+  const patternColors = processedTriangles.filter(pt => pt.isPatterned).map(pt => pt.avg);
+  if (patternColors.length > 1 && numColors < patternColors.length) {
+    const centroids = kMeansCluster(patternColors, Math.min(numColors, patternColors.length));
+    for (const pt of processedTriangles) {
+      if (pt.isPatterned) {
+        pt.avg = nearestCentroid(pt.avg, centroids);
+      }
+    }
   }
 
   const counts = {};
