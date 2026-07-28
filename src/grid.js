@@ -5,64 +5,132 @@ export function assignPattern(lightness, activePatterns) {
   return activePatterns[bucketIdx] ?? null;
 }
 
-export function generateLockedGrid(panelWidth, panelHeight, numCols, numRows, activePatterns, getLightnessAt) {
-  const W = (2 * panelWidth) / (numCols + 1);
-  const H = panelHeight / numRows;
-  const colH = W / 2;
+/**
+ * Generate a proper equilateral-triangle asanoha lattice.
+ *
+ * Geometry (equilateral triangles with side = pitch):
+ *   horizontal vertex spacing = pitch
+ *   vertical vertex spacing   = pitch * sqrt(3) / 2
+ *   odd rows offset by pitch / 2
+ *
+ * @param {number} innerW  – inner panel width in px (after frame)
+ * @param {number} innerH  – inner panel height in px (after frame)
+ * @param {number} numCols – Size B: number of triangles horizontally
+ * @param {number} numRows – Size A: number of triangles vertically
+ * @param {Array}  activePatterns – selected pattern indices
+ * @param {Function} getLightnessAt – (cx, cy) → 0..1
+ * @returns {Array} triangles
+ */
+export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatterns, getLightnessAt) {
+  const pitchX = innerW / numCols;
+  const h = innerH / numRows;
+  const pitch = (2 * h) / Math.sqrt(3);
+
+  const cols = numCols + 1;
+  const rows = numRows + 1;
+
+  const vertices = [];
+  for (let row = 0; row < rows; row++) {
+    vertices[row] = [];
+    const offsetX = (row % 2 === 1) ? pitchX / 2 : 0;
+    for (let col = 0; col < cols; col++) {
+      vertices[row][col] = {
+        x: col * pitchX + offsetX,
+        y: row * h,
+      };
+    }
+  }
 
   const triangles = [];
 
-  for (let col = 0; col < numCols; col++) {
-    const x0 = col * colH;
-    const parity = col % 2;
+  for (let row = 0; row < numRows; row++) {
+    const isOdd = row % 2 === 1;
 
-    for (let row = 0; row < numRows; row++) {
-      const yBase = row * H;
-      const offsetY = parity * (H / 2);
+    const colsStart = isOdd ? 0 : 0;
+    const colsEnd = isOdd ? numCols : numCols;
 
-      const ax = x0;
-      const ay = yBase + offsetY;
-      const bx = x0 + colH;
-      const by = yBase + offsetY + H / 2;
-      const cx = x0;
-      const cy = yBase + offsetY + H;
+    for (let col = colsStart; col < colsEnd; col++) {
+      if (!isOdd) {
+        if (col < numCols) {
+          const a = vertices[row][col];
+          const b = vertices[row][col + 1];
+          const c = vertices[row + 1][col + 1];
 
-      const centerUpX = (ax + bx + cx) / 3;
-      const centerUpY = (ay + by + cy) / 3;
+          const cx = (a.x + b.x + c.x) / 3;
+          const cy = (a.y + b.y + c.y) / 3;
+          const lightness = getLightnessAt(cx, cy);
+          const pattern = assignPattern(lightness, activePatterns);
 
-      const lightnessUp = getLightnessAt(centerUpX, centerUpY);
-      const patternUp = assignPattern(lightnessUp, activePatterns);
+          triangles.push({
+            vertices: [a, b, c],
+            center: { x: cx, y: cy },
+            col, row,
+            isInverted: false,
+            lightness,
+            pattern,
+          });
+        }
 
-      triangles.push({
-        vertices: [{ x: ax, y: ay }, { x: bx, y: by }, { x: cx, y: cy }],
-        center: { x: centerUpX, y: centerUpY },
-        col, row,
-        isInverted: false,
-        lightness: lightnessUp,
-        pattern: patternUp,
-      });
+        if (col > 0) {
+          const a = vertices[row][col];
+          const b = vertices[row + 1][col];
+          const c = vertices[row + 1][col - 1];
 
-      const dx = x0 + colH;
-      const dy = yBase + offsetY;
-      const ex = x0;
-      const ey = yBase + offsetY + H / 2;
-      const fx = x0 + colH;
-      const fy = yBase + offsetY + H;
+          const cx = (a.x + b.x + c.x) / 3;
+          const cy = (a.y + b.y + c.y) / 3;
+          const lightness = getLightnessAt(cx, cy);
+          const pattern = assignPattern(lightness, activePatterns);
 
-      const centerDownX = (dx + ex + fx) / 3;
-      const centerDownY = (dy + ey + fy) / 3;
+          triangles.push({
+            vertices: [a, b, c],
+            center: { x: cx, y: cy },
+            col, row,
+            isInverted: true,
+            lightness,
+            pattern,
+          });
+        }
+      } else {
+        if (col < numCols) {
+          const a = vertices[row][col];
+          const b = vertices[row + 1][col];
+          const c = vertices[row + 1][col + 1];
 
-      const lightnessDown = getLightnessAt(centerDownX, centerDownY);
-      const patternDown = assignPattern(lightnessDown, activePatterns);
+          const cx = (a.x + b.x + c.x) / 3;
+          const cy = (a.y + b.y + c.y) / 3;
+          const lightness = getLightnessAt(cx, cy);
+          const pattern = assignPattern(lightness, activePatterns);
 
-      triangles.push({
-        vertices: [{ x: dx, y: dy }, { x: ex, y: ey }, { x: fx, y: fy }],
-        center: { x: centerDownX, y: centerDownY },
-        col, row,
-        isInverted: true,
-        lightness: lightnessDown,
-        pattern: patternDown,
-      });
+          triangles.push({
+            vertices: [a, b, c],
+            center: { x: cx, y: cy },
+            col, row,
+            isInverted: false,
+            lightness,
+            pattern,
+          });
+        }
+
+        if (col < numCols) {
+          const a = vertices[row][col + 1];
+          const b = vertices[row][col];
+          const c = vertices[row + 1][col + 1];
+
+          const cx = (a.x + b.x + c.x) / 3;
+          const cy = (a.y + b.y + c.y) / 3;
+          const lightness = getLightnessAt(cx, cy);
+          const pattern = assignPattern(lightness, activePatterns);
+
+          triangles.push({
+            vertices: [a, b, c],
+            center: { x: cx, y: cy },
+            col, row,
+            isInverted: true,
+            lightness,
+            pattern,
+          });
+        }
+      }
     }
   }
 
