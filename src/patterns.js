@@ -366,13 +366,17 @@ export const REAL_PATTERNS = [
 ];
 
 const OUTLINE_PREFIX = "M.037 249.12 144.037 0l.293.212L288.075 249.48l-.33.148L0 249.48";
-const PATH_SCALE = 100 / 288.075;
+const SCALE_X = 100 / 288.075;
+const SCALE_Y = 100 / 249.628;
 
 function normalizePath(d) {
+  let i = 0;
   return d.replace(/(-?\d*\.?\d+)/g, (match) => {
     const n = parseFloat(match);
     if (isNaN(n)) return match;
-    return String(+(n * PATH_SCALE).toFixed(4));
+    const scale = (i % 2 === 0) ? SCALE_X : SCALE_Y;
+    i++;
+    return String(+(n * scale).toFixed(4));
   });
 }
 
