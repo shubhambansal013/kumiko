@@ -165,32 +165,31 @@ describe('grid: triangle count', () => {
     const numCols = 21;
     const numRows = 10;
     const tris = makeGrid(numCols, numRows);
-    // With odd numCols, flipFirst=false.
-    // Even cols: numRows right + (numRows+1) left
-    // Odd cols:  (numRows+1) left + numRows right
+    // flipFirst=false. Even cols: numRows inverted + (numRows+1) non-inverted
+    // Odd cols: (numRows+1) inverted + numRows non-inverted
     const evenCols = Math.ceil(numCols / 2);
     const oddCols = Math.floor(numCols / 2);
-    const expectedRight = (evenCols + oddCols) * numRows;
-    const expectedLeft = (evenCols + oddCols) * (numRows + 1);
-    expect(tris.filter(t => !t.isInverted).length).toBe(expectedRight);
-    expect(tris.filter(t => t.isInverted).length).toBe(expectedLeft);
-    expect(tris.length).toBe(expectedRight + expectedLeft);
+    const expectedInverted = evenCols * numRows + oddCols * (numRows + 1);
+    const expectedNonInverted = evenCols * (numRows + 1) + oddCols * numRows;
+    expect(tris.filter(t => t.isInverted).length).toBe(expectedInverted);
+    expect(tris.filter(t => !t.isInverted).length).toBe(expectedNonInverted);
+    expect(tris.length).toBe(expectedInverted + expectedNonInverted);
   });
 
   it('even numCols', () => {
     const numCols = 20;
     const numRows = 10;
     const tris = makeGrid(numCols, numRows);
-    // With flipFirst, the parity is reversed but counts are the same:
-    // odd columns (flipped): (numRows+1) + numRows
-    // even columns (flipped): numRows + (numRows+1)
-    const oddCols = Math.ceil(numCols / 2);
-    const evenCols = Math.floor(numCols / 2);
-    const expectedRight = (oddCols + evenCols) * numRows;
-    const expectedLeft = (oddCols + evenCols) * (numRows + 1);
-    expect(tris.filter(t => !t.isInverted).length).toBe(expectedRight);
-    expect(tris.filter(t => t.isInverted).length).toBe(expectedLeft);
-    expect(tris.length).toBe(expectedRight + expectedLeft);
+    // flipFirst=true reverses parity. Even-indexed cols are odd-parity:
+    // Even cols (odd-parity): (numRows+1) inverted + numRows non-inverted
+    // Odd cols (even-parity): numRows inverted + (numRows+1) non-inverted
+    const evenCols = Math.ceil(numCols / 2);
+    const oddCols = Math.floor(numCols / 2);
+    const expectedInverted = evenCols * (numRows + 1) + oddCols * numRows;
+    const expectedNonInverted = evenCols * numRows + oddCols * (numRows + 1);
+    expect(tris.filter(t => t.isInverted).length).toBe(expectedInverted);
+    expect(tris.filter(t => !t.isInverted).length).toBe(expectedNonInverted);
+    expect(tris.length).toBe(expectedInverted + expectedNonInverted);
   });
 
   it('all triangles have valid vertices', () => {
@@ -238,10 +237,8 @@ describe('grid: each triangle has 3 distinct vertices', () => {
 describe('grid: flipFirst behavior', () => {
   it('odd numCols: col 0 is even (vertices at y = 0, h, 2h, ...)', () => {
     const tris = makeGrid(5, 5);
-    const pitchX = PITCH * SQRT3_OVER_2;
-    // col 0 right-pointing triangles: vertices at left[k], left[k+1], right[k+1]
-    // left vertices for even col: y = 0, h, 2h, ...
-    const col0 = tris.filter(t => t.col === 0 && !t.isInverted);
+    // col 0 is even-parity, right-pointing triangles have isInverted=true
+    const col0 = tris.filter(t => t.col === 0 && t.isInverted);
     expect(col0.length).toBeGreaterThan(0);
     for (const tri of col0) {
       const ys = tri.vertices.map(v => v.y).sort((a, b) => a - b);
