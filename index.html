@@ -90,28 +90,6 @@
       <input type="text" id="backfillColorHex" value="#0a0908" style="width: 80px; text-transform: uppercase;">
     </div>
     <div class="hint">Fills the space behind the pattern lines inside each triangle (defaults to black).</div>
-    <div style="margin-top: 12px;">
-      <div style="font-size:0.82rem; font-weight:bold; margin-bottom:4px;">Pattern matching weights</div>
-      <div class="hint" style="margin-bottom:4px;">Control how density, detail, and color influence which pattern is assigned.</div>
-      <div style="display:flex; justify-content:space-between; font-size:0.82rem;">
-        <label for="wDensity" style="margin:0;">Density</label>
-        <span id="wDensityVal">50%</span>
-      </div>
-      <input type="range" id="wDensity" min="0" max="100" value="50" style="width:100%; cursor:pointer;" title="Density weight: how strongly pattern ink coverage follows image brightness">
-      <div class="hint">Higher = darker areas get ink-dense patterns; lighter areas get sparse ones.</div>
-      <div style="display:flex; justify-content:space-between; font-size:0.82rem; margin-top:5px;">
-        <label for="wDetail" style="margin:0;">Detail</label>
-        <span id="wDetailVal">30%</span>
-      </div>
-      <input type="range" id="wDetail" min="0" max="100" value="30" style="width:100%; cursor:pointer;" title="Detail weight: how strongly pattern complexity follows image texture variation">
-      <div class="hint">Higher = textured areas get intricate patterns; flat areas get simple ones.</div>
-      <div style="display:flex; justify-content:space-between; font-size:0.82rem; margin-top:5px;">
-        <label for="wColor" style="margin:0;">Color bias</label>
-        <span id="wColorVal">20%</span>
-      </div>
-      <input type="range" id="wColor" min="0" max="100" value="20" style="width:100%; cursor:pointer;" title="Color bias: how strongly colorful areas prefer sparser, more open patterns to show color">
-      <div class="hint">Higher = colorful areas prefer sparser patterns to let color show through.</div>
-    </div>
   </fieldset>
 
   <fieldset>

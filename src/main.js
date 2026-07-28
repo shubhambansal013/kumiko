@@ -172,10 +172,6 @@ processBtn.addEventListener('click', async () => {
   const activePatterns = sortPatternsByDensity(Array.from(selectedPatterns.values()), patternLinePx);
   processingDebug('activePatterns (by density)', activePatterns);
 
-  const wDensity = parseFloat(document.getElementById('wDensity')?.value || 50) / 100;
-  const wDetail = parseFloat(document.getElementById('wDetail')?.value || 30) / 100;
-  const wColor = parseFloat(document.getElementById('wColor')?.value || 20) / 100;
-
   // Adaptive stdDev normalization — estimate 95th percentile from image patches
   const maxStdDev = (() => {
     const step = 20, radius = 4;
@@ -206,14 +202,12 @@ processBtn.addEventListener('click', async () => {
         y: (p.y + frameWidthPx) * (W_sample / W)
       }));
       const avg = polygonBoundsAndAvgColor(scaled, imgData, W_sample, H_sample);
-      if (!avg) return { lightness: 0.5, stdDev: 0, chroma: 0 };
+      if (!avg) return { lightness: 0.5, stdDev: 0 };
       const lightness = (avg.r + avg.g + avg.b) / (3 * 255);
       const stdDev = Math.min(1, (avg.stdDev || 0) / maxStdDev);
-      const chroma = (Math.max(avg.r, avg.g, avg.b) - Math.min(avg.r, avg.g, avg.b)) / 255;
-      return { lightness, stdDev, chroma };
+      return { lightness, stdDev };
     },
-    patternFeatures,
-    { density: wDensity, detail: wDetail, color: wColor }
+    patternFeatures
   );
 
   const processedTriangles = [];
@@ -402,18 +396,4 @@ document.getElementById('imageFit').addEventListener('change', () => {
   if (sourceImg) processBtn.click();
 });
 
-function setupWeightSlider(id, labelId) {
-  const slider = document.getElementById(id);
-  const label = document.getElementById(labelId);
-  if (slider && label) {
-    const update = () => { label.textContent = slider.value + '%'; };
-    slider.addEventListener('input', () => {
-      update();
-      if (sourceImg) processBtn.click();
-    });
-    update();
-  }
-}
-setupWeightSlider('wDensity', 'wDensityVal');
-setupWeightSlider('wDetail', 'wDetailVal');
-setupWeightSlider('wColor', 'wColorVal');
+
