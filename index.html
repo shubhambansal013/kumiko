@@ -219,7 +219,59 @@
   </fieldset>
 
   <fieldset>
-    <legend>6. Canvas Zoom</legend>
+    <legend>6. Empty Space & Cost Optimization</legend>
+    <div class="checkrow">
+      <input type="checkbox" id="enablePruning" checked>
+      <label for="enablePruning"><b>Optimize Empty Space</b></label>
+    </div>
+    <div class="hint" style="margin-bottom:12px;">Prevents adding patterns to empty backgrounds to reduce piece count and cost.</div>
+
+    <div style="margin-left: 10px; border-left: 2px solid var(--line); padding-left: 10px;">
+      <div class="checkrow">
+        <input type="checkbox" id="pruneVariance" checked>
+        <label for="pruneVariance">Skip solid/flat areas</label>
+      </div>
+      <div style="margin-bottom: 8px;">
+        <div style="display:flex; justify-content:space-between; font-size:0.78rem;">
+          <span>Color variance threshold</span>
+          <span id="varianceVal">8</span>
+        </div>
+        <input type="range" id="pruneVarianceThreshold" min="1" max="50" value="8" style="width:100%; cursor:pointer;">
+        <div class="hint">Higher values skip more solid background areas.</div>
+      </div>
+
+      <div class="checkrow">
+        <input type="checkbox" id="pruneWhite" checked>
+        <label for="pruneWhite">Skip light/white areas</label>
+      </div>
+      <div style="margin-bottom: 8px;">
+        <div style="display:flex; justify-content:space-between; font-size:0.78rem;">
+          <span>Brightness threshold (Max)</span>
+          <span id="whiteVal">95%</span>
+        </div>
+        <input type="range" id="pruneWhiteThreshold" min="50" max="100" value="95" style="width:100%; cursor:pointer;">
+      </div>
+
+      <div class="checkrow">
+        <input type="checkbox" id="pruneBlack">
+        <label for="pruneBlack">Skip dark/black areas</label>
+      </div>
+      <div style="margin-bottom: 8px;">
+        <div style="display:flex; justify-content:space-between; font-size:0.78rem;">
+          <span>Brightness threshold (Min)</span>
+          <span id="blackVal">5%</span>
+        </div>
+        <input type="range" id="pruneBlackThreshold" min="0" max="50" value="5" style="width:100%; cursor:pointer;">
+      </div>
+    </div>
+
+    <label style="margin-top:12px;">Cost per patterned piece ($)</label>
+    <input type="number" id="costPerPiece" value="1.50" step="0.05" min="0">
+    <div class="hint">Estimated material/labor cost per patterned triangle.</div>
+  </fieldset>
+
+  <fieldset>
+    <legend>7. Canvas Zoom</legend>
     <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
       <button type="button" id="zoomOutBtn" style="padding:6px 12px; font-size:1rem; cursor:pointer; background:#fff; border:1px solid var(--line); border-radius:4px;">-</button>
       <input type="range" id="zoomSlider" min="100" max="400" step="10" value="100" style="flex:1; cursor:pointer;">
@@ -913,20 +965,38 @@ function polygonBoundsAndAvgColor(poly, imgData, w, h){
 
   let rSum=0,gSum=0,bSum=0,n=0;
   const step=2;
+  const samples = [];
   for(let y=minY;y<=maxY;y+=step){
     for(let x=minX;x<=maxX;x+=step){
       if(pointInPoly(x,y)){
         const idx=(y*w+x)*4;
-        rSum+=imgData[idx]; gSum+=imgData[idx+1]; bSum+=imgData[idx+2]; n++;
+        const r = imgData[idx];
+        const g = imgData[idx+1];
+        const b = imgData[idx+2];
+        rSum+=r; gSum+=g; bSum+=b;
+        samples.push(0.299*r + 0.587*g + 0.114*b);
+        n++;
       }
     }
   }
   if(n===0){
     const cx=Math.floor((minX+maxX)/2), cy=Math.floor((minY+maxY)/2);
     const idx=(Math.min(h-1,Math.max(0,cy))*w+Math.min(w-1,Math.max(0,cx)))*4;
-    return {r:imgData[idx],g:imgData[idx+1],b:imgData[idx+2]};
+    return {r:imgData[idx],g:imgData[idx+1],b:imgData[idx+2], stdDev: 0};
   }
-  return {r:rSum/n,g:gSum/n,b:bSum/n};
+  const rAvg = rSum/n;
+  const gAvg = gSum/n;
+  const bAvg = bSum/n;
+
+  // Calculate standard deviation of luminance inside the triangle
+  const lAvg = 0.299*rAvg + 0.587*gAvg + 0.114*bAvg;
+  let sqDiffSum = 0;
+  for(let i=0; i<samples.length; i++){
+    sqDiffSum += (samples[i] - lAvg) ** 2;
+  }
+  const stdDev = Math.sqrt(sqDiffSum / n);
+
+  return {r:rAvg, g:gAvg, b:bAvg, stdDev: stdDev};
 }
 
 // Deterministic K-means clustering for color reduction
@@ -1155,6 +1225,8 @@ processBtn.addEventListener('click', () => {
   console.log("Step 2 done. Centroids count:", centroids.length);
   const counts = {};
   let totalPieces = 0;
+  let totalPatterned = 0;
+  let totalFlat = 0;
 
   octx.save();
   octx.translate(frameWidthPx, frameWidthPx);
@@ -1176,6 +1248,7 @@ processBtn.addEventListener('click', () => {
 
     const grayscale = (avg.r + avg.g + avg.b) / 3;
     const avgDarkness = (255 - grayscale) / 255;
+    const brightnessPercent = (grayscale / 255) * 100;
     const activePatterns = patternDarknesses.filter(p => patternList.includes(p.index + 1));
     const isInverted = Math.abs(tri[0].x - tri[1].x) < 0.001;
 
@@ -1186,6 +1259,24 @@ processBtn.addEventListener('click', () => {
       pNum = activePatterns[bucketIdx].index + 1;
     }
 
+    // Apply Cost Optimization / Empty Space Pruning
+    let isPruned = false;
+    if (document.getElementById('enablePruning').checked) {
+      if (document.getElementById('pruneVariance').checked && avg.stdDev < parseFloat(document.getElementById('pruneVarianceThreshold').value)) {
+        isPruned = true;
+      }
+      if (document.getElementById('pruneWhite').checked && brightnessPercent > parseFloat(document.getElementById('pruneWhiteThreshold').value)) {
+        isPruned = true;
+      }
+      if (document.getElementById('pruneBlack').checked && brightnessPercent < parseFloat(document.getElementById('pruneBlackThreshold').value)) {
+        isPruned = true;
+      }
+    }
+
+    if (isPruned) {
+      pNum = 0;
+    }
+
     if(showPattern && pNum > 0){
       const customThicknessVal = parseFloat(document.getElementById('patternThickness').value);
       const chosenThickness = isNaN(customThicknessVal) ? mitsuke : customThicknessVal;
@@ -1194,10 +1285,14 @@ processBtn.addEventListener('click', () => {
       const opacity = isNaN(opacityVal) ? 0.5 : opacityVal;
 
       paintPatternTile(octx, pNum, minX, minY, Math.max(1,maxX-minX), Math.max(1,maxY-minY), hexColor, backfillColor, isInverted, opacity, thicknessPx, true);
-    } else if (showPattern && pNum === 0) {
-      if (!showImage) {
-        octx.fillStyle = hexColor;
-        octx.fillRect(minX, minY, maxX-minX, maxY-minY);
+      totalPatterned++;
+    } else {
+      totalFlat++;
+      if (showPattern && pNum === 0) {
+        if (!showImage) {
+          octx.fillStyle = hexColor;
+          octx.fillRect(minX, minY, maxX-minX, maxY-minY);
+        }
       }
     }
     octx.restore();
@@ -1231,6 +1326,7 @@ processBtn.addEventListener('click', () => {
 
   lastCounts = {
     counts, patternName, sizeA, sizeB, total: totalPieces,
+    totalPatterned, totalFlat,
     pitch, mitsuke, frameWidthMM,
     panelWidthMM: panelWidthMM.toFixed(0), panelHeightMM: panelHeightMM.toFixed(0)
   };
@@ -1273,15 +1369,36 @@ function renderOutput(){
   wrap.appendChild(outputCanvas);
   canvasArea.appendChild(wrap);
 
-  const { counts, patternName, sizeA, sizeB, total, pitch, mitsuke, frameWidthMM, panelWidthMM, panelHeightMM } = lastCounts;
+  const { counts, patternName, sizeA, sizeB, total, totalPatterned, totalFlat, pitch, mitsuke, frameWidthMM, panelWidthMM, panelHeightMM } = lastCounts;
+
+  const costPerPieceVal = parseFloat(document.getElementById('costPerPiece').value) || 0;
+  const patternedCost = (totalPatterned || 0) * costPerPieceVal;
+  const savings = (totalFlat || 0) * costPerPieceVal;
 
   let html = `<div class="section-title">Result — ${patternName}</div>`;
   html += `<div class="stats-row">
-    <div class="stat"><b>${total}</b>triangle pieces (incl. edge halves)</div>
+    <div class="stat"><b>${total}</b>Total triangles</div>
+    <div class="stat"><b>${totalPatterned || 0}</b>Patterned pieces</div>
+    <div class="stat"><b>${totalFlat || 0}</b>Flat/Empty pieces</div>
     <div class="stat"><b>${sizeA} × ${sizeB}</b>Height × Width</div>
-    <div class="stat"><b>${panelWidthMM} × ${panelHeightMM} mm</b>panel size</div>
-    <div class="stat"><b>${pitch} mm</b>pitch</div>
+    <div class="stat"><b>${panelWidthMM} × ${panelHeightMM} mm</b>Panel size</div>
+    <div class="stat"><b>${pitch} mm</b>Pitch</div>
   </div>`;
+
+  if (costPerPieceVal > 0) {
+    html += `<div class="stats-row" style="margin-top: 10px; background: #fcfbf9; padding: 12px; border-radius: 6px; border: 1px dashed var(--line); display: inline-flex; width: 100%; max-width: 480px; gap: 20px;">
+      <div class="stat" style="flex: 1; margin: 0;">
+        <span style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: #8a8378;">Est. Pattern Cost</span>
+        <b style="font-size: 1.15rem; color: var(--accent);">$${patternedCost.toFixed(2)}</b>
+        <span style="font-size: 0.7rem; color: #8a8378;">${totalPatterned || 0} × $${costPerPieceVal.toFixed(2)}</span>
+      </div>
+      <div class="stat" style="flex: 1; margin: 0;">
+        <span style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: #2e7d32;">Optimized Savings</span>
+        <b style="font-size: 1.15rem; color: #2e7d32;">$${savings.toFixed(2)}</b>
+        <span style="font-size: 0.7rem; color: #2e7d32;">Saved ${totalFlat || 0} pieces!</span>
+      </div>
+    </div>`;
+  }
 
   html += `<table><thead><tr><th>Pattern</th><th>Color</th><th>Pieces</th><th>% of panel</th></tr></thead><tbody>`;
   Object.keys(counts).sort().forEach(key => {
@@ -1370,6 +1487,64 @@ document.getElementById('showImage').addEventListener('change', () => {
 document.getElementById('showPattern').addEventListener('change', () => {
   if (sourceImg) {
     processBtn.click();
+  }
+});
+
+// --- Empty Space & Cost Optimization Logic ---
+const enablePruning = document.getElementById('enablePruning');
+const pruneVariance = document.getElementById('pruneVariance');
+const pruneVarianceThreshold = document.getElementById('pruneVarianceThreshold');
+const varianceVal = document.getElementById('varianceVal');
+
+const pruneWhite = document.getElementById('pruneWhite');
+const pruneWhiteThreshold = document.getElementById('pruneWhiteThreshold');
+const whiteVal = document.getElementById('whiteVal');
+
+const pruneBlack = document.getElementById('pruneBlack');
+const pruneBlackThreshold = document.getElementById('pruneBlackThreshold');
+const blackVal = document.getElementById('blackVal');
+
+const costPerPiece = document.getElementById('costPerPiece');
+
+function updatePruningUI() {
+  if (varianceVal && pruneVarianceThreshold) {
+    varianceVal.textContent = pruneVarianceThreshold.value;
+  }
+  if (whiteVal && pruneWhiteThreshold) {
+    whiteVal.textContent = pruneWhiteThreshold.value + '%';
+  }
+  if (blackVal && pruneBlackThreshold) {
+    blackVal.textContent = pruneBlackThreshold.value + '%';
+  }
+
+  // Disable/enable sub-controls based on master checkbox
+  const isPruningEnabled = enablePruning.checked;
+  const subElements = [
+    pruneVariance, pruneVarianceThreshold,
+    pruneWhite, pruneWhiteThreshold,
+    pruneBlack, pruneBlackThreshold
+  ];
+  subElements.forEach(el => {
+    if (el) el.disabled = !isPruningEnabled;
+  });
+}
+
+// Initial UI sync
+updatePruningUI();
+
+// Event listeners to update values and re-trigger mapped triangles rendering
+[
+  enablePruning, pruneVariance, pruneVarianceThreshold,
+  pruneWhite, pruneWhiteThreshold, pruneBlack, pruneBlackThreshold,
+  costPerPiece
+].forEach(el => {
+  if (el) {
+    el.addEventListener('input', () => {
+      updatePruningUI();
+      if (sourceImg) {
+        processBtn.click();
+      }
+    });
   }
 });
 </script>
