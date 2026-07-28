@@ -3,7 +3,7 @@ import { DEFAULT_IMAGE_B64 } from './default-image.js';
 import { rgbToHex, kMeansCluster, nearestCentroid } from './utils.js';
 import { polygonBoundsAndAvgColor } from './geometry.js';
 import { generateLockedGrid } from './grid.js';
-import { paintPatternTile, sortPatternsByDensity, getPatternFeatures } from './patterns.js';
+import { paintPatternTile, sortPatternsByDensity } from './patterns.js';
 import { selectedPatterns, renderGallery, setupGalleryButtons } from './gallery.js';
 import { drawPreview, applyZoomStyle, renderOutput } from './renderer.js';
 import { getImageCrop } from './image-fit.js';
@@ -26,8 +26,6 @@ let currentZoomLevel = 100;
 let sourceImg = null;
 let outputCanvas = null;
 let lastCounts = null;
-
-const patternFeatures = getPatternFeatures();
 
 function syncPatternThicknessPlaceholder() {
   if (mitsukeInput && patternThicknessInput) {
@@ -172,27 +170,6 @@ processBtn.addEventListener('click', async () => {
   const activePatterns = sortPatternsByDensity(Array.from(selectedPatterns.values()), patternLinePx);
   processingDebug('activePatterns (by density)', activePatterns);
 
-  // Adaptive stdDev normalization — estimate 95th percentile from image patches
-  const maxStdDev = (() => {
-    const step = 20, radius = 4;
-    const vals = [];
-    for (let y = radius; y + radius < H_sample; y += step) {
-      for (let x = radius; x + radius < W_sample; x += step) {
-        const samples = [];
-        for (let dy = -radius; dy <= radius; dy++) {
-          for (let dx = -radius; dx <= radius; dx++) {
-            const idx = ((y + dy) * W_sample + (x + dx)) * 4;
-            samples.push(0.299 * imgData[idx] + 0.587 * imgData[idx + 1] + 0.114 * imgData[idx + 2]);
-          }
-        }
-        const m = samples.reduce((a, b) => a + b, 0) / samples.length;
-        vals.push(Math.sqrt(samples.reduce((s, v) => s + (v - m) ** 2, 0) / samples.length));
-      }
-    }
-    vals.sort((a, b) => a - b);
-    return Math.max(1, vals[Math.floor(0.95 * vals.length)]);
-  })();
-
   const gridTriangles = generateLockedGrid(
     innerWpx, innerHpx, sizeB, sizeA,
     activePatterns,
@@ -202,12 +179,9 @@ processBtn.addEventListener('click', async () => {
         y: (p.y + frameWidthPx) * (W_sample / W)
       }));
       const avg = polygonBoundsAndAvgColor(scaled, imgData, W_sample, H_sample);
-      if (!avg) return { lightness: 0.5, stdDev: 0 };
-      const lightness = (avg.r + avg.g + avg.b) / (3 * 255);
-      const stdDev = Math.min(1, (avg.stdDev || 0) / maxStdDev);
-      return { lightness, stdDev };
-    },
-    patternFeatures
+      if (!avg) return 0.5;
+      return (avg.r + avg.g + avg.b) / (3 * 255);
+    }
   );
 
   const processedTriangles = [];
