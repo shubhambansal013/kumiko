@@ -28,7 +28,6 @@ let outputCanvas = null;
 let lastCounts = null;
 let lastProcessedTriangles = null;
 let originalColorMap = {};
-let originalColorByPattern = {};
 let userColorOverrides = {};
 let lastRenderParams = null;
 
@@ -273,7 +272,7 @@ processBtn.addEventListener('click', async () => {
     const patternKey = t.pattern > 0 ? "Pattern " + t.pattern : "Flat/None";
     const combKey = t.pattern > 0 ? (patternKey + "_" + rawHex) : "Flat/None";
     
-    const hexColor = (t.pattern > 0 && userColorOverrides[patternKey]) ? userColorOverrides[patternKey] : rawHex;
+    const hexColor = (t.pattern > 0 && userColorOverrides[combKey]) ? userColorOverrides[combKey] : rawHex;
     const v = t.vertices;
 
     octx.save();
@@ -346,17 +345,6 @@ processBtn.addEventListener('click', async () => {
     }
   });
 
-  // Also store first color per pattern for reset reference
-  originalColorByPattern = {};
-  Object.keys(counts).forEach(key => {
-    if (counts[key].color !== "N/A") {
-      const patternKey = key.split('_')[0];
-      if (!originalColorByPattern[patternKey]) {
-        originalColorByPattern[patternKey] = counts[key].color.toUpperCase();
-      }
-    }
-  });
-
   lastRenderParams = {
     sizeA, sizeB, pitch, mitsuke, frameWidthMM, frameColor, jigumiColor, backfillColor,
     backfillOpacity: parseFloat(document.getElementById('backfillOpacity').value) || 0.5,
@@ -369,25 +357,24 @@ processBtn.addEventListener('click', async () => {
 
   setColorChangeCallback(handleColorChange);
 
-  renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, currentZoomLevel, downloadImgBtn, downloadCsvBtn, userColorOverrides, originalColorMap, originalColorByPattern });
+  renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, currentZoomLevel, downloadImgBtn, downloadCsvBtn, userColorOverrides, originalColorMap });
 });
 
-function handleColorChange(key, newColor) {
+function handleColorChange(combKey, newColor) {
   if (!lastProcessedTriangles || !lastRenderParams || !outputCanvas) return;
 
   // Special key for render-only (no color change, just re-render with current overrides)
-  if (key === '__render_only__') {
+  if (combKey === '__render_only__') {
     // Just re-render with current userColorOverrides
   } else {
-    // Extract patternKey from combKey (e.g., "Pattern 1_#FF0000" -> "Pattern 1")
-    const patternKey = key.includes('_') ? key.split('_')[0] : key;
     const color = newColor.toUpperCase();
+    const originalColor = originalColorMap[combKey]?.toUpperCase();
     
-    // Store override by patternKey
-    if (color === originalColorByPattern[patternKey]) {
-      delete userColorOverrides[patternKey];
+    // Store override by combKey (pattern_originalHex)
+    if (originalColor && color === originalColor) {
+      delete userColorOverrides[combKey];
     } else {
-      userColorOverrides[patternKey] = color;
+      userColorOverrides[combKey] = color;
     }
   }
 
@@ -431,12 +418,13 @@ function handleColorChange(key, newColor) {
     const isInverted = t.isInverted;
     const v = t.vertices;
 
-    const patternKey2 = pNum > 0 ? "Pattern " + pNum : "Flat/None";
     const rawHex = rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b)).toUpperCase();
+    const patternKey = pNum > 0 ? "Pattern " + pNum : "Flat/None";
+    const combKey = pNum > 0 ? (patternKey + "_" + rawHex) : "Flat/None";
 
     let hexColor;
-    if (pNum > 0 && userColorOverrides[patternKey2]) {
-      hexColor = userColorOverrides[patternKey2];
+    if (pNum > 0 && userColorOverrides[combKey]) {
+      hexColor = userColorOverrides[combKey];
     } else {
       hexColor = rawHex;
     }

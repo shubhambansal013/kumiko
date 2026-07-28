@@ -38,10 +38,11 @@ export function drawPreview(canvasArea, sourceImg) {
   canvasArea.appendChild(wrap);
 }
 
-function createColorInputGroup(combKey, patternKey, color, defaultColor, userOverrides) {
-  const currentColor = userOverrides[patternKey] || color;
-  const isDefault = !userOverrides[patternKey];
-  const resetBtn = !isDefault ? `<button type="button" class="reset-color-btn" data-pattern="${patternKey}" title="Reset to default" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.75rem;padding:0;margin-left:4px;">↩</button>` : '';
+function createColorInputGroup(combKey, patternKey, color, defaultColor, userOverrides, originalColorMap) {
+  const currentColor = userOverrides[combKey] || color;
+  const originalForComb = originalColorMap[combKey]?.toUpperCase();
+  const isDefault = originalForComb === currentColor;
+  const resetBtn = !isDefault ? `<button type="button" class="reset-color-btn" data-comb="${combKey}" title="Reset to default" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.75rem;padding:0;margin-left:4px;">↩</button>` : '';
   return `<div class="color-input-group" data-comb="${combKey}" data-pattern="${patternKey}" style="display:flex;align-items:center;gap:4px;">
     <input type="color" class="result-color-picker" value="${currentColor}" style="width:28px;height:28px;padding:0;border:1px solid var(--line);border-radius:4px;cursor:pointer;">
     <input type="text" class="result-color-hex" value="${currentColor}" style="width:80px;font-family:monospace;font-size:0.8rem;text-transform:uppercase;border:1px solid var(--line);border-radius:4px;padding:2px 6px;">
@@ -49,7 +50,7 @@ function createColorInputGroup(combKey, patternKey, color, defaultColor, userOve
   </div>`;
 }
 
-export function renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, currentZoomLevel, downloadImgBtn, downloadCsvBtn, userColorOverrides = {}, originalColorMap = {}, originalColorByPattern = {} }) {
+export function renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, currentZoomLevel, downloadImgBtn, downloadCsvBtn, userColorOverrides = {}, originalColorMap = {} }) {
   canvasArea.innerHTML = '';
   const wrap = document.createElement('div');
   wrap.className = 'canvas-wrap';
@@ -84,7 +85,7 @@ export function renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, 
     const pct = total > 0 ? ((item.count / total) * 100).toFixed(1) : '0.0';
     const patternKey = item.pattern;
     const defaultColor = originalColorMap[combKey]?.toUpperCase() || item.color.toUpperCase();
-    const colorCell = item.color === "N/A" ? "" : createColorInputGroup(combKey, patternKey, item.color.toUpperCase(), defaultColor, userColorOverrides);
+    const colorCell = item.color === "N/A" ? "" : createColorInputGroup(combKey, patternKey, item.color.toUpperCase(), defaultColor, userColorOverrides, originalColorMap);
     html += `<tr>
       <td>${colorCell}</td>
       <td>${item.pattern}</td>
@@ -102,18 +103,18 @@ export function renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, 
   downloadImgBtn.style.display = 'block';
   downloadCsvBtn.style.display = 'block';
 
-  function getPatternKey(group) {
-    return group.dataset.pattern;
+  function getCombKey(group) {
+    return group.dataset.comb;
   }
 
   function updateResetBtn(group, isDefault) {
     const resetBtn = group.querySelector('.reset-color-btn');
     if (!isDefault && !resetBtn) {
-      const patternKey = group.dataset.pattern;
+      const combKey = group.dataset.comb;
       const newResetBtn = document.createElement('button');
       newResetBtn.type = 'button';
       newResetBtn.className = 'reset-color-btn';
-      newResetBtn.dataset.pattern = patternKey;
+      newResetBtn.dataset.comb = combKey;
       newResetBtn.title = 'Reset to default';
       newResetBtn.textContent = '↩';
       newResetBtn.style.cssText = 'background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.75rem;padding:0;margin-left:4px;';
@@ -126,14 +127,14 @@ export function renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, 
   resultsEl.querySelectorAll('.result-color-picker').forEach(picker => {
     picker.addEventListener('input', (e) => {
       const group = e.target.closest('.color-input-group');
-      const patternKey = getPatternKey(group);
+      const combKey = getCombKey(group);
       const hexInput = group.querySelector('.result-color-hex');
       const color = e.target.value.toUpperCase();
       hexInput.value = color;
-      if (colorChangeCallback) colorChangeCallback(patternKey, color);
+      if (colorChangeCallback) colorChangeCallback(combKey, color);
 
-      const defaultColor = originalColorByPattern[patternKey]?.toUpperCase();
-      const isDefault = defaultColor === color;
+      const originalForComb = originalColorMap[combKey]?.toUpperCase();
+      const isDefault = originalForComb === color;
       updateResetBtn(group, isDefault);
     });
   });
@@ -141,7 +142,7 @@ export function renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, 
   resultsEl.querySelectorAll('.result-color-hex').forEach(hexInput => {
     hexInput.addEventListener('input', (e) => {
       const group = e.target.closest('.color-input-group');
-      const patternKey = getPatternKey(group);
+      const combKey = getCombKey(group);
       const picker = group.querySelector('.result-color-picker');
       let value = e.target.value.trim();
       if (!value.startsWith('#')) value = '#' + value;
@@ -153,10 +154,10 @@ export function renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, 
         const color = value.toUpperCase();
         e.target.value = color;
         picker.value = color;
-        if (colorChangeCallback) colorChangeCallback(patternKey, color);
+        if (colorChangeCallback) colorChangeCallback(combKey, color);
 
-        const defaultColor = originalColorByPattern[patternKey]?.toUpperCase();
-        const isDefault = defaultColor === color;
+        const originalForComb = originalColorMap[combKey]?.toUpperCase();
+        const isDefault = originalForComb === color;
         updateResetBtn(group, isDefault);
       }
     });
@@ -165,8 +166,8 @@ export function renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, 
   resultsEl.querySelectorAll('.reset-color-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const group = e.target.closest('.color-input-group');
-      const patternKey = group.dataset.pattern;
-      const defaultColor = originalColorByPattern[patternKey]?.toUpperCase();
+      const combKey = group.dataset.comb;
+      const defaultColor = originalColorMap[combKey]?.toUpperCase();
       if (!defaultColor) return;
 
       const picker = group.querySelector('.result-color-picker');
@@ -176,19 +177,19 @@ export function renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, 
       hexInput.value = defaultColor;
       e.target.remove();
 
-      if (colorChangeCallback) colorChangeCallback(patternKey, defaultColor);
+      if (colorChangeCallback) colorChangeCallback(combKey, defaultColor);
     });
   });
 
   const resetAllBtn = resultsEl.querySelector('#resetAllColorsBtn');
   if (resetAllBtn) {
     resetAllBtn.addEventListener('click', () => {
-      const patternKeys = Object.keys(originalColorByPattern);
-      patternKeys.forEach(patternKey => {
-        const defaultColor = originalColorByPattern[patternKey]?.toUpperCase();
+      const combKeys = Object.keys(originalColorMap);
+      combKeys.forEach(combKey => {
+        const defaultColor = originalColorMap[combKey]?.toUpperCase();
         if (!defaultColor) return;
 
-        const groups = resultsEl.querySelectorAll(`.color-input-group[data-pattern="${patternKey}"]`);
+        const groups = resultsEl.querySelectorAll(`.color-input-group[data-comb="${combKey}"]`);
         groups.forEach(group => {
           const picker = group.querySelector('.result-color-picker');
           const hexInput = group.querySelector('.result-color-hex');
@@ -198,7 +199,7 @@ export function renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, 
           if (resetBtn) resetBtn.remove();
         });
 
-        if (colorChangeCallback) colorChangeCallback(patternKey, defaultColor);
+        if (colorChangeCallback) colorChangeCallback(combKey, defaultColor);
       });
     });
   }
