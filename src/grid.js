@@ -54,7 +54,7 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
         if (col < numCols) {
           const a = vertices[row][col];
           const b = vertices[row][col + 1];
-          const c = vertices[row + 1][col + 1];
+          const c = vertices[row + 1][col];
 
           const cx = (a.x + b.x + c.x) / 3;
           const cy = (a.y + b.y + c.y) / 3;
