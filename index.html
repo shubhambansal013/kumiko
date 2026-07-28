@@ -129,11 +129,11 @@
     <div class="row2">
       <div>
         <label>Height (triangles)</label>
-        <input type="number" id="sizeA" value="42" min="1">
+        <input type="number" id="sizeA" value="20" min="1">
       </div>
       <div>
         <label>Width (triangles)</label>
-        <input type="number" id="sizeB" value="20" min="1">
+        <input type="number" id="sizeB" value="42" min="1">
       </div>
     </div>
     <label>Frame width (mm)</label>
@@ -201,9 +201,33 @@
       <label for="showPattern">Show Kumiko pattern</label>
     </div>
     <div style="margin-top: 10px;">
+      <label for="mappingAlgorithm">Pattern mapping algorithm</label>
+      <select id="mappingAlgorithm">
+        <option value="clustered-darkness">Clustered Color Darkness (1 pattern per color)</option>
+        <option value="original-darkness" selected>Original Image Darkness (Multi-pattern detail)</option>
+        <option value="local-contrast">Local Contrast / Complexity</option>
+        <option value="color-hue">Color Hue (HSL)</option>
+        <option value="palette-index">Color Palette Index</option>
+      </select>
+      <div class="hint">Determines how Kumiko patterns are mapped to triangles.</div>
+    </div>
+    <div style="margin-top: 10px;">
       <label for="maxColors">Max colors (K-means)</label>
       <input type="number" id="maxColors" value="4" min="1" max="64">
       <div class="hint">Reduces the variation of dynamically determined triangle colors to match the user input.</div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>6. Canvas Zoom</legend>
+    <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
+      <button type="button" id="zoomOutBtn" style="padding:6px 12px; font-size:1rem; cursor:pointer; background:#fff; border:1px solid var(--line); border-radius:4px;">-</button>
+      <input type="range" id="zoomSlider" min="100" max="400" step="10" value="100" style="flex:1; cursor:pointer;">
+      <button type="button" id="zoomInBtn" style="padding:6px 12px; font-size:1rem; cursor:pointer; background:#fff; border:1px solid var(--line); border-radius:4px;">+</button>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+      <span style="font-size:0.82rem; color:#6b6459;">Zoom Level: <span id="zoomValLabel" style="font-weight:bold;">100%</span></span>
+      <button type="button" id="zoomResetBtn" style="background:none; border:none; color:var(--accent); cursor:pointer; font-size:0.82rem; font-weight:bold; padding:0;">Reset Zoom</button>
     </div>
   </fieldset>
 
@@ -228,6 +252,12 @@ const paletteList = document.getElementById('paletteList');
 const addColorBtn = document.getElementById('addColorBtn');
 const downloadImgBtn = document.getElementById('downloadImgBtn');
 const downloadCsvBtn = document.getElementById('downloadCsvBtn');
+const downloadSvgBtn = document.getElementById('downloadSvgBtn');
+const zoomSlider = document.getElementById('zoomSlider');
+const zoomInBtn = document.getElementById('zoomInBtn');
+const zoomOutBtn = document.getElementById('zoomOutBtn');
+const zoomResetBtn = document.getElementById('zoomResetBtn');
+const zoomValLabel = document.getElementById('zoomValLabel');
 const patternSelect = document.getElementById('patternName');
 const patternCustom = document.getElementById('patternCustom');
 
@@ -244,6 +274,7 @@ if (mitsukeInput) {
   syncPatternThicknessPlaceholder();
 }
 
+let currentZoomLevel = 100;
 let sourceImg = null;
 let outputCanvas = null;
 let lastCounts = null;
@@ -1002,6 +1033,7 @@ function buildTriangles(innerW, innerH, pitch, flipHalf){
 
 processBtn.addEventListener('click', () => {
   if(!sourceImg) return;
+  console.log("processBtn clicked!");
 
   const sizeA = Math.max(1, parseInt(document.getElementById('sizeA').value) || 1);
   const sizeB = Math.max(1, parseInt(document.getElementById('sizeB').value) || 1);
@@ -1021,16 +1053,20 @@ processBtn.addEventListener('click', () => {
   const panelWidthMM = innerWidthMM + frameWidthMM*2;
   const panelHeightMM = innerHeightMM + frameWidthMM*2;
 
-  const W = 1100;
+  const W = 2400;
   const pxPerMM = W / panelWidthMM;
   const H = Math.round(panelHeightMM * pxPerMM);
 
+  const W_sample = 800;
+  const pxPerMM_sample = W_sample / panelWidthMM;
+  const H_sample = Math.round(panelHeightMM * pxPerMM_sample);
+
   const srcCanvas = document.createElement('canvas');
-  srcCanvas.width = W; srcCanvas.height = H;
+  srcCanvas.width = W_sample; srcCanvas.height = H_sample;
   const sctx = srcCanvas.getContext('2d');
   // fit source image to inner area proportionally, letterboxed within full panel for sampling
-  sctx.drawImage(sourceImg, 0, 0, W, H);
-  const imgData = sctx.getImageData(0,0,W,H).data;
+  sctx.drawImage(sourceImg, 0, 0, W_sample, H_sample);
+  const imgData = sctx.getImageData(0,0,W_sample,H_sample).data;
 
   const frameWidthPx = frameWidthMM * pxPerMM;
   const pitchPx = pitch * pxPerMM;
@@ -1068,41 +1104,55 @@ processBtn.addEventListener('click', () => {
   const backfillColor = document.getElementById('backfillColor').value;
   const patternList = Array.from(selectedPatterns.values());
 
+  console.log("Step 1 pre-processing starting... rawTriangles count:", rawTriangles.length);
   // Step 1: Pre-process raw triangles to collect averages for K-means clustering
   const processedTriangles = [];
   rawTriangles.forEach(tri => {
     const clipped = clipPolygonToRect(tri, innerWpx, innerHpx);
     if (clipped.length < 3) return;
+
+    // Scale coordinates to sampling space
+    const scaleToSample = W_sample / W;
+    const sampleClipped = clipped.map(p => ({
+      x: (p.x + frameWidthPx) * scaleToSample,
+      y: (p.y + frameWidthPx) * scaleToSample
+    }));
+
     const avg = polygonBoundsAndAvgColor(
-      clipped.map(p => ({ x: p.x + frameWidthPx, y: p.y + frameWidthPx })),
-      imgData, W, H
+      sampleClipped,
+      imgData, W_sample, H_sample
     );
     if (!avg) return;
-    processedTriangles.push({ tri, clipped, avg });
+    processedTriangles.push({ tri, clipped, avg, originalAvg: { r: avg.r, g: avg.g, b: avg.b, stdDev: avg.stdDev } });
   });
 
+  console.log("Step 1 done. processedTriangles count:", processedTriangles.length);
   // Step 2: Perform K-means color clustering if K is specified
   const maxColorsInput = parseInt(document.getElementById('maxColors').value) || 4;
   const centroids = performKMeans(processedTriangles.map(pt => pt.avg), maxColorsInput);
 
   // Map each triangle's avg color to the closest centroid
-  processedTriangles.forEach(pt => {
+  processedTriangles.forEach((pt, triIdx) => {
+    let bestIdx = 0;
     if (centroids.length > 0) {
       let bestCentroid = centroids[0];
       let minDist = Infinity;
-      centroids.forEach(cent => {
+      centroids.forEach((cent, centIdx) => {
         const dist = (pt.avg.r - cent.r) ** 2 + (pt.avg.g - cent.g) ** 2 + (pt.avg.b - cent.b) ** 2;
         if (dist < minDist) {
           minDist = dist;
           bestCentroid = cent;
+          bestIdx = centIdx;
         }
       });
       pt.avg.r = bestCentroid.r;
       pt.avg.g = bestCentroid.g;
       pt.avg.b = bestCentroid.b;
     }
+    pt.clusterIndex = bestIdx;
   });
 
+  console.log("Step 2 done. Centroids count:", centroids.length);
   const counts = {};
   let totalPieces = 0;
 
@@ -1187,17 +1237,40 @@ processBtn.addEventListener('click', () => {
   renderOutput();
 });
 
+function applyZoomStyle(canvas, wrap) {
+  if (!canvas) return;
+  if (!canvas.zoomLevel) canvas.zoomLevel = 100;
+  if (canvas.zoomLevel === 100) {
+    canvas.style.width = '100%';
+    canvas.style.maxWidth = '100%';
+    if (wrap) {
+      wrap.style.maxWidth = '100%';
+      wrap.style.width = 'auto';
+    }
+  } else {
+    canvas.style.width = canvas.zoomLevel + '%';
+    canvas.style.maxWidth = 'none';
+    if (wrap) {
+      wrap.style.maxWidth = 'none';
+      wrap.style.width = 'max-content';
+    }
+  }
+}
+
 function renderOutput(){
+  console.log("renderOutput() called!");
   canvasArea.innerHTML = '';
   const wrap = document.createElement('div');
   wrap.className = 'canvas-wrap';
-  const displayCanvas = document.createElement('canvas');
-  const maxW = 760;
-  const scale = Math.min(1, maxW / outputCanvas.width);
-  displayCanvas.width = outputCanvas.width * scale;
-  displayCanvas.height = outputCanvas.height * scale;
-  displayCanvas.getContext('2d').drawImage(outputCanvas, 0, 0, displayCanvas.width, displayCanvas.height);
-  wrap.appendChild(displayCanvas);
+
+  // Display the outputCanvas directly to maintain perfect crispness!
+  outputCanvas.style.display = 'block';
+  outputCanvas.style.background = '#eee';
+
+  outputCanvas.zoomLevel = currentZoomLevel;
+  applyZoomStyle(outputCanvas, wrap);
+
+  wrap.appendChild(outputCanvas);
   canvasArea.appendChild(wrap);
 
   const { counts, patternName, sizeA, sizeB, total, pitch, mitsuke, frameWidthMM, panelWidthMM, panelHeightMM } = lastCounts;
@@ -1251,6 +1324,43 @@ downloadCsvBtn.addEventListener('click', () => {
   a.href = URL.createObjectURL(blob);
   a.click();
 });
+
+function updateZoom(newZoom) {
+  newZoom = Math.max(100, Math.min(400, newZoom));
+  currentZoomLevel = newZoom;
+  if (outputCanvas) {
+    outputCanvas.zoomLevel = newZoom;
+    const wrap = canvasArea.querySelector('.canvas-wrap');
+    applyZoomStyle(outputCanvas, wrap);
+  }
+  if (zoomSlider) {
+    zoomSlider.value = newZoom;
+  }
+  if (zoomValLabel) {
+    zoomValLabel.textContent = newZoom + '%';
+  }
+}
+
+if (zoomSlider) {
+  zoomSlider.addEventListener('input', (e) => {
+    updateZoom(parseInt(e.target.value));
+  });
+}
+if (zoomInBtn) {
+  zoomInBtn.addEventListener('click', () => {
+    updateZoom(currentZoomLevel + 10);
+  });
+}
+if (zoomOutBtn) {
+  zoomOutBtn.addEventListener('click', () => {
+    updateZoom(currentZoomLevel - 10);
+  });
+}
+if (zoomResetBtn) {
+  zoomResetBtn.addEventListener('click', () => {
+    updateZoom(100);
+  });
+}
 
 document.getElementById('showImage').addEventListener('change', () => {
   if (sourceImg) {
