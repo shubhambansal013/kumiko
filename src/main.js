@@ -1,6 +1,6 @@
 import './style.css';
 import { DEFAULT_IMAGE_B64 } from './default-image.js';
-import { rgbToHex } from './utils.js';
+import { rgbToHex, kMeansCluster, nearestCentroid } from './utils.js';
 import { polygonBoundsAndAvgColor } from './geometry.js';
 import { generateLockedGrid } from './grid.js';
 import { paintPatternTile, sortPatternsByDensity } from './patterns.js';
@@ -198,6 +198,17 @@ processBtn.addEventListener('click', async () => {
       avg,
       isPatterned: t.pattern !== null,
     });
+  }
+
+  const numColors = Math.max(1, parseInt(document.getElementById('numInsertColors').value) || 3);
+  const patternColors = processedTriangles.filter(pt => pt.isPatterned).map(pt => pt.avg);
+  if (patternColors.length > 1 && numColors < patternColors.length) {
+    const centroids = kMeansCluster(patternColors, Math.min(numColors, patternColors.length));
+    for (const pt of processedTriangles) {
+      if (pt.isPatterned) {
+        pt.avg = nearestCentroid(pt.avg, centroids);
+      }
+    }
   }
 
   const counts = {};
