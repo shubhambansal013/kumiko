@@ -5,7 +5,7 @@ import { polygonBoundsAndAvgColor } from './geometry.js';
 import { generateLockedGrid } from './grid.js';
 import { paintPatternTile, sortPatternsByDensity } from './patterns.js';
 import { selectedPatterns, renderGallery, setupGalleryButtons } from './gallery.js';
-import { drawPreview, applyZoomStyle, renderOutput } from './renderer.js';
+import { drawPreview, applyZoomStyle, renderOutput, setColorChangeCallback } from './renderer.js';
 import { getImageCrop } from './image-fit.js';
 
 const fileInput = document.getElementById('fileInput');
@@ -26,6 +26,10 @@ let currentZoomLevel = 100;
 let sourceImg = null;
 let outputCanvas = null;
 let lastCounts = null;
+let lastProcessedTriangles = null;
+let originalColorMap = {};
+let userColorOverrides = {};
+let lastRenderParams = null;
 
 function syncPatternThicknessPlaceholder() {
   if (mitsukeInput && patternThicknessInput) {
@@ -33,8 +37,21 @@ function syncPatternThicknessPlaceholder() {
   }
 }
 if (mitsukeInput) {
-  mitsukeInput.addEventListener('input', syncPatternThicknessPlaceholder);
+  mitsukeInput.addEventListener('input', () => {
+    syncPatternThicknessPlaceholder();
+    if (sourceImg) processBtn.click();
+  });
   syncPatternThicknessPlaceholder();
+}
+
+const autoTriggerIds = ['sizeA', 'sizeB', 'pitch', 'frameWidth', 'patternThickness', 'backfillOpacity', 'numInsertColors'];
+for (const id of autoTriggerIds) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('input', () => {
+      if (sourceImg) processBtn.click();
+    });
+  }
 }
 
 function setupColorSync(colorId, hexId) {
@@ -289,8 +306,165 @@ processBtn.addEventListener('click', async () => {
     pitch, mitsuke, frameWidthMM,
     panelWidthMM: panelWidthMM.toFixed(0), panelHeightMM: panelHeightMM.toFixed(0)
   };
-  renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, currentZoomLevel, downloadImgBtn, downloadCsvBtn });
+
+  lastProcessedTriangles = processedTriangles;
+
+  originalColorMap = {};
+  Object.keys(counts).forEach(key => {
+    if (counts[key].color !== "N/A") {
+      originalColorMap[key] = counts[key].color.toUpperCase();
+    }
+  });
+
+  lastRenderParams = {
+    sizeA, sizeB, pitch, mitsuke, frameWidthMM, frameColor, jigumiColor, backfillColor,
+    backfillOpacity: parseFloat(document.getElementById('backfillOpacity').value) || 0.5,
+    patternLinePx, innerWpx, innerHpx, frameWidthPx, W, H, W_sample, pxPerMM, s,
+    showImage: document.getElementById('showImage').checked,
+    showPattern: document.getElementById('showPattern').checked,
+    activePatterns,
+    mitsukePx
+  };
+
+  setColorChangeCallback(handleColorChange);
+
+  renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, currentZoomLevel, downloadImgBtn, downloadCsvBtn, userColorOverrides, originalColorMap });
 });
+
+function handleColorChange(key, newColor) {
+  if (!lastProcessedTriangles || !lastRenderParams || !outputCanvas) return;
+
+  userColorOverrides[key] = newColor.toUpperCase();
+
+  const octx = outputCanvas.getContext('2d');
+  const { W, H, frameWidthPx, innerWpx, innerHpx, showImage, showPattern, backfillColor, backfillOpacity, patternLinePx, jigumiColor, frameColor, mitsukePx } = lastRenderParams;
+
+  octx.clearRect(0, 0, W, H);
+
+  octx.fillStyle = frameColor;
+  octx.fillRect(0, 0, W, H);
+
+  if (showImage) {
+    const srcCanvas = document.createElement('canvas');
+    srcCanvas.width = W; srcCanvas.height = H;
+    const sctx = srcCanvas.getContext('2d');
+    const fitMode = document.getElementById('imageFit').value;
+    const r = getImageCrop(sourceImg.naturalWidth, sourceImg.naturalHeight, innerWpx, innerHpx, fitMode);
+    sctx.fillStyle = '#ffffff';
+    sctx.fillRect(0, 0, W, H);
+    sctx.drawImage(sourceImg, r.sx, r.sy, r.sw, r.sh, frameWidthPx + r.dx, frameWidthPx + r.dy, r.dw, r.dh);
+
+    octx.save();
+    octx.beginPath();
+    octx.rect(frameWidthPx, frameWidthPx, innerWpx, innerHpx);
+    octx.clip();
+    octx.drawImage(srcCanvas, 0, 0);
+    octx.restore();
+  } else {
+    octx.fillStyle = "#ffffff";
+    octx.fillRect(frameWidthPx, frameWidthPx, innerWpx, innerHpx);
+  }
+
+  octx.save();
+  octx.translate(frameWidthPx, frameWidthPx);
+  octx.beginPath();
+  octx.rect(0, 0, innerWpx, innerHpx);
+  octx.clip();
+
+  for (const { t, avg, isPatterned } of lastProcessedTriangles) {
+    const pNum = t.pattern;
+    const isInverted = t.isInverted;
+    const v = t.vertices;
+
+    const patternKey = pNum > 0 ? "Pattern " + pNum : "Flat/None";
+    const combKey = pNum > 0 ? (patternKey + "_" + rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b)).toUpperCase()) : "Flat/None";
+
+    let hexColor;
+    if (pNum > 0 && userColorOverrides[combKey]) {
+      hexColor = userColorOverrides[combKey];
+    } else {
+      hexColor = rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b));
+    }
+
+    octx.save();
+    octx.beginPath();
+    octx.moveTo(v[0].x, v[0].y);
+    octx.lineTo(v[1].x, v[1].y);
+    octx.lineTo(v[2].x, v[2].y);
+    octx.closePath();
+    octx.clip();
+
+    if (showPattern && pNum > 0) {
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      v.forEach(p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); });
+
+      paintPatternTile(octx, pNum, minX, minY, Math.max(1, maxX - minX), Math.max(1, maxY - minY), hexColor, backfillColor, isInverted, backfillOpacity, patternLinePx);
+    } else {
+      octx.fillStyle = pNum > 0 ? hexColor : "#ffffff";
+      octx.fill();
+    }
+    octx.restore();
+
+    octx.beginPath();
+    octx.moveTo(v[0].x, v[0].y);
+    octx.lineTo(v[1].x, v[1].y);
+    octx.lineTo(v[2].x, v[2].y);
+    octx.closePath();
+    octx.lineWidth = mitsukePx;
+    octx.strokeStyle = jigumiColor;
+    octx.stroke();
+  }
+
+  octx.restore();
+
+  const resultsEl = document.getElementById('results');
+  const rows = resultsEl.querySelectorAll('tbody tr');
+  rows.forEach(row => {
+    const colorCell = row.querySelector('.color-input-group');
+    if (colorCell) {
+      const key = colorCell.dataset.key;
+      if (key) {
+        const picker = colorCell.querySelector('.result-color-picker');
+        const hexInput = colorCell.querySelector('.result-color-hex');
+        const resetBtn = colorCell.querySelector('.reset-color-btn');
+        const defaultColor = originalColorMap[key];
+        const currentColor = userColorOverrides[key] || defaultColor;
+        const isDefault = !userColorOverrides[key];
+
+        if (picker) picker.value = currentColor;
+        if (hexInput) hexInput.value = currentColor;
+        if (resetBtn && isDefault) {
+          resetBtn.remove();
+        } else if (!resetBtn && !isDefault) {
+          const newResetBtn = document.createElement('button');
+          newResetBtn.type = 'button';
+          newResetBtn.className = 'reset-color-btn';
+          newResetBtn.dataset.key = key;
+          newResetBtn.title = 'Reset to default';
+          newResetBtn.textContent = '↩';
+          newResetBtn.style.cssText = 'background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.75rem;padding:0;margin-left:4px;';
+          hexInput.parentElement.appendChild(newResetBtn);
+          newResetBtn.addEventListener('click', (e) => {
+            const group = e.target.closest('.color-input-group');
+            const k = group.dataset.key;
+            const dColor = originalColorMap[k];
+            if (!dColor) return;
+            const p = group.querySelector('.result-color-picker');
+            const h = group.querySelector('.result-color-hex');
+            p.value = dColor;
+            h.value = dColor;
+            e.target.remove();
+            delete userColorOverrides[k];
+            if (colorChangeCallback) colorChangeCallback(k, dColor);
+          });
+        }
+      }
+    }
+  });
+
+  const wrap = canvasArea.querySelector('.canvas-wrap');
+  applyZoomStyle(outputCanvas, wrap);
+}
 
 downloadImgBtn.addEventListener('click', () => {
   if (!outputCanvas) return;
