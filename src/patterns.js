@@ -365,6 +365,67 @@ export const REAL_PATTERNS = [
   }
 ];
 
+function svgPathLength(pathStr) {
+  let totalLen = 0;
+  let cx = 0, cy = 0, sx = 0, sy = 0;
+  let cmd = '', curNum = '';
+  let nums = [];
+  function flush() { if (curNum !== '') { nums.push(parseFloat(curNum)); curNum = ''; } }
+  function exec() {
+    if (nums.length < 2) { nums = []; return; }
+    if (cmd === 'z' || cmd === 'Z') { totalLen += Math.hypot(cx - sx, cy - sy); cx = sx; cy = sy; nums = []; return; }
+    const rel = cmd === cmd.toLowerCase() && cmd !== 'z';
+    const move = cmd === 'm' || cmd === 'M';
+    let k = 0;
+    while (k + 1 < nums.length) {
+      const nx = rel ? cx + nums[k] : nums[k];
+      const ny = rel ? cy + nums[k + 1] : nums[k + 1];
+      if (move && k === 0) { sx = nx; sy = ny; }
+      else { totalLen += Math.hypot(nx - cx, ny - cy); }
+      cx = nx; cy = ny;
+      k += 2;
+    }
+    nums = [];
+  }
+  for (const ch of pathStr) {
+    if (/[MmLlCcQqAaZz]/.test(ch)) { flush(); if (cmd) exec(); cmd = ch; }
+    else if (/[-\d.eE]/.test(ch)) { curNum += ch; }
+    else { flush(); }
+  }
+  flush();
+  if (cmd) exec();
+  return totalLen;
+}
+
+let _patternFeatures = null;
+
+export function getPatternFeatures() {
+  if (_patternFeatures) return _patternFeatures;
+  const canvas = document.createElement('canvas');
+  canvas.width = 144; canvas.height = 125;
+  const ctx = canvas.getContext('2d');
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 1;
+
+  const raw = REAL_PATTERNS.map((p, idx) => {
+    ctx.clearRect(0, 0, 144, 125);
+    p.paths.forEach(d => ctx.stroke(new Path2D(d)));
+    const data = ctx.getImageData(0, 0, 144, 125).data;
+    let drawn = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] > 0) drawn++;
+    const density = drawn / (144 * 125);
+    let detail = 0;
+    p.paths.forEach(d => { detail += svgPathLength(d); });
+    return { index: idx, density, detail };
+  });
+
+  const maxDensity = Math.max(...raw.map(f => f.density));
+  const maxDetail = Math.max(...raw.map(f => f.detail)) || 1;
+  raw.forEach(f => { f.density /= maxDensity; f.detail /= maxDetail; });
+  _patternFeatures = raw;
+  return _patternFeatures;
+}
+
 function drawMotif(ctx, w, h, fg, index, isInverted, lineWidth) {
   const pat = REAL_PATTERNS[index];
   if (!pat) return;

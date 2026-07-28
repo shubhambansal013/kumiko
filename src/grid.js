@@ -1,9 +1,45 @@
+import { getPatternFeatures } from './patterns.js';
+
+/**
+ * Multi-dimensional pattern matching using weighted Euclidean distance.
+ *
+ * @param {object} triFeatures – { lightness (0..1), stdDev, chroma }
+ * @param {Array} activePatterns – pattern index list
+ * @param {Array} patternFeatures – pre-computed [{index, density, detail}]
+ * @param {object} weights – { density, detail, color } (0..1 each)
+ * @returns {number|null} matched pattern index (1-based), or null
+ */
+// Backward-compat alias for tests
 export function assignPattern(lightness, activePatterns) {
   if (!activePatterns || activePatterns.length === 0) return null;
   const bucketSize = 1 / activePatterns.length;
   const rawIdx = Math.floor(lightness / bucketSize);
   const bucketIdx = activePatterns.length - 1 - Math.min(activePatterns.length - 1, rawIdx);
   return activePatterns[bucketIdx] ?? null;
+}
+
+export function assignMultiDimPattern(triFeatures, activePatterns, patternFeatures, weights) {
+  if (!activePatterns || activePatterns.length === 0) return null;
+  // Handle both old (number) and new (object) feature formats
+  const lightness = typeof triFeatures === 'number' ? triFeatures : triFeatures.lightness;
+  const triDensity = 1 - lightness;
+  const triDetail = typeof triFeatures === 'number' ? 0 : Math.min(1, (triFeatures.stdDev || 0));
+  const triChroma = typeof triFeatures === 'number' ? 0 : (triFeatures.chroma || 0);
+  const wD = (weights && weights.density) || 0;
+  const wDet = (weights && weights.detail) || 0;
+  const wC = (weights && weights.color) || 0;
+
+  let bestDist = Infinity;
+  let bestIdx = activePatterns[0];
+  for (const patIdx of activePatterns) {
+    const pf = patternFeatures[patIdx - 1];
+    if (!pf) continue;
+    const dDen = triDensity - pf.density;
+    const dDet = triDetail - pf.detail;
+    const dist = wD * dDen * dDen + wDet * dDet * dDet + wC * triChroma * pf.density;
+    if (dist < bestDist) { bestDist = dist; bestIdx = patIdx; }
+  }
+  return bestIdx;
 }
 
 /**
@@ -23,10 +59,13 @@ export function assignPattern(lightness, activePatterns) {
  * @param {number} numCols – Size B: number of triangles horizontally
  * @param {number} numRows – Size A: number of triangles vertically
  * @param {Array}  activePatterns – selected pattern indices
- * @param {Function} getLightnessAt – (vertices) → 0..1 where vertices = [{x,y},...]
+ * @param {Function} getFeaturesAt – (vertices) → { lightness, stdDev, chroma }
+ * @param {Array}  patternFeatures – pre-computed pattern feature vectors
+ * @param {object} weights – { density, detail, color }
  * @returns {Array} triangles
  */
-export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatterns, getLightnessAt) {
+export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatterns, getFeaturesAt, patternFeatures, weights) {
+  const hasFeatures = Array.isArray(patternFeatures) && patternFeatures.length > 0;
   const pitchX = innerW / numCols;
   const h = innerH / numRows;
   const flipFirst = numCols % 2 === 0;
@@ -66,14 +105,17 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
           const a = left[k];
           const b = left[k + 1];
           const d = right[k + 1];
-          const lightness = getLightnessAt([a, b, d]);
-          const pattern = assignPattern(lightness, activePatterns);
+          const raw = getFeaturesAt([a, b, d]);
+          const features = typeof raw === 'number' ? { lightness: raw, stdDev: 0, chroma: 0 } : raw;
+          const pattern = hasFeatures
+            ? assignMultiDimPattern(features, activePatterns, patternFeatures, weights)
+            : assignPattern(features.lightness, activePatterns);
           triangles.push({
             vertices: [a, b, d],
             center: { x: (a.x + b.x + d.x) / 3, y: (a.y + b.y + d.y) / 3 },
             col, row: k,
             isInverted: true,
-            lightness,
+            lightness: features.lightness,
             pattern,
           });
         }
@@ -87,14 +129,17 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
           const a = right[k];
           const b = right[k + 1];
           const d = left[k];
-          const lightness = getLightnessAt([a, b, d]);
-          const pattern = assignPattern(lightness, activePatterns);
+          const raw = getFeaturesAt([a, b, d]);
+          const features = typeof raw === 'number' ? { lightness: raw, stdDev: 0, chroma: 0 } : raw;
+          const pattern = hasFeatures
+            ? assignMultiDimPattern(features, activePatterns, patternFeatures, weights)
+            : assignPattern(features.lightness, activePatterns);
           triangles.push({
             vertices: [a, b, d],
             center: { x: (a.x + b.x + d.x) / 3, y: (a.y + b.y + d.y) / 3 },
             col, row: k,
             isInverted: false,
-            lightness,
+            lightness: features.lightness,
             pattern,
           });
         }
@@ -108,14 +153,17 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
           const a = left[k];
           const b = left[k + 1];
           const d = right[k];
-          const lightness = getLightnessAt([a, b, d]);
-          const pattern = assignPattern(lightness, activePatterns);
+          const raw = getFeaturesAt([a, b, d]);
+          const features = typeof raw === 'number' ? { lightness: raw, stdDev: 0, chroma: 0 } : raw;
+          const pattern = hasFeatures
+            ? assignMultiDimPattern(features, activePatterns, patternFeatures, weights)
+            : assignPattern(features.lightness, activePatterns);
           triangles.push({
             vertices: [a, b, d],
             center: { x: (a.x + b.x + d.x) / 3, y: (a.y + b.y + d.y) / 3 },
             col, row: k,
             isInverted: true,
-            lightness,
+            lightness: features.lightness,
             pattern,
           });
         }
@@ -129,14 +177,17 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
           const a = right[k];
           const b = right[k + 1];
           const d = left[k + 1];
-          const lightness = getLightnessAt([a, b, d]);
-          const pattern = assignPattern(lightness, activePatterns);
+          const raw = getFeaturesAt([a, b, d]);
+          const features = typeof raw === 'number' ? { lightness: raw, stdDev: 0, chroma: 0 } : raw;
+          const pattern = hasFeatures
+            ? assignMultiDimPattern(features, activePatterns, patternFeatures, weights)
+            : assignPattern(features.lightness, activePatterns);
           triangles.push({
             vertices: [a, b, d],
             center: { x: (a.x + b.x + d.x) / 3, y: (a.y + b.y + d.y) / 3 },
             col, row: k,
             isInverted: false,
-            lightness,
+            lightness: features.lightness,
             pattern,
           });
         }
