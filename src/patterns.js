@@ -374,6 +374,9 @@ function drawMotif(ctx, w, h, fg, index, isInverted) {
     ctx.rotate(Math.PI);
     ctx.translate(-w / 2, -h / 2);
   }
+  ctx.translate(w / 2, h / 2);
+  ctx.rotate(Math.PI / 2);
+  ctx.translate(-w / 2, -h / 2);
   ctx.scale(w / pat.w, h / pat.h);
   ctx.strokeStyle = fg;
   ctx.lineWidth = 1.5;
@@ -408,13 +411,15 @@ export function buildPatternSvg(index, w, h, fgColor, bgColor, isInverted) {
 
   let pathsSvg = '';
   pat.paths.forEach(d => {
-    pathsSvg += `<path d="${d}" fill="none" stroke="${fgColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"`;
     const transforms = [];
+    transforms.push(`translate(${w / 2} ${h / 2})`);
+    transforms.push(`rotate(90)`);
+    transforms.push(`translate(${-w / 2} ${-h / 2})`);
     if (isInverted) {
       transforms.push(`translate(${w / 2} ${h / 2}) rotate(180) translate(${-w / 2} ${-h / 2})`);
     }
     transforms.push(`scale(${scaleX} ${scaleY})`);
-    pathsSvg += ` transform="${transforms.join(' ')}"`;
+    pathsSvg += `<path d="${d}" fill="none" stroke="${fgColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" transform="${transforms.join(' ')}"`;
     pathsSvg += `/>`;
   });
 
