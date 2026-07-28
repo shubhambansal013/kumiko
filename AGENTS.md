@@ -2,17 +2,36 @@
 
 ## What this is
 
-Single-file static web app (`index.html`) — a Kumiko Color Mapper that maps images onto equilateral-triangle lattice patterns for paper craft. No build system, no package manager, no bundler.
+Kumiko Color Mapper — a single-page front-end app that maps images onto equilateral-triangle lattice patterns for paper craft. Built with Vite, no backend.
 
-## Architecture
+## Project structure
 
-- **`index.html`** — the entire app (HTML + inline CSS + inline JS, ~1600 lines). No external dependencies.
-- **`verify_kumiko.py`** — Playwright smoke test. Opens `index.html` as a `file://` URL, waits 5s for the embedded default image to load and process, takes a screenshot. Requires Playwright + Chromium installed. Hardcoded paths (`/app/index.html`, `/home/jules/verification/`) are CI-specific — adjust for local runs.
-- **`.github/workflows/deploy.yml`** — copies `index.html` into `dist/` and deploys to Cloudflare Pages on push to main/master. The "build" step is just `mkdir dist && cp index.html dist/`.
+```
+index.html          Vite entry point (root-level, references src/)
+src/
+  main.js           App logic (~1300 lines, vanilla JS, ES module)
+  style.css         All styles
+package.json        npm project, Vite dev dependency
+vite.config.js      Build config (outputs to dist/)
+verify_kumiko.py    Playwright smoke test
+.github/workflows/deploy.yml  CI → Cloudflare Pages
+```
 
 ## Development
 
-There is no dev server or hot reload. Open `index.html` directly in a browser. All code is inline — edit the file and refresh.
+```bash
+npm install
+npm run dev         # starts Vite dev server on localhost:5173
+```
+
+Open `http://localhost:5173` in a browser. Edit files in `src/` — Vite hot-reloads automatically.
+
+## Build
+
+```bash
+npm run build       # outputs to dist/
+npm run preview     # preview the production build locally
+```
 
 ## Verification
 
@@ -21,16 +40,16 @@ pip install playwright && playwright install chromium
 python verify_kumiko.py
 ```
 
-Note: `verify_kumiko.py` writes to `/home/jules/verification/` — change those paths before running locally.
+The script starts the Vite dev server, waits for the default image to process, takes a screenshot to `verification/screenshots/`, then shuts down the server.
 
 ## Deployment
 
-Automatic on push to `main` or `master` via GitHub Actions → Cloudflare Pages. No manual build step needed.
+Automatic on push to `main`/`master` via GitHub Actions → Cloudflare Pages. The CI workflow runs `npm ci && npm run build`, then deploys `dist/`.
 
 ## Key conventions
 
-- All JS is vanilla (no frameworks, no modules). The global scope contains the full app state.
-- The 46 Kumiko patterns are defined as SVG-path data in the `REAL_PATTERNS` array (line ~400).
-- An embedded base64 JPEG (`DEFAULT_IMAGE_B64`, line ~382) provides a default sample image on load.
+- All JS is vanilla (no frameworks, no modules beyond ES module syntax). Global scope in `src/main.js` contains the full app state.
+- The 46 Kumiko patterns are defined as SVG-path data in the `REAL_PATTERNS` array (~line 400 of `src/main.js`).
+- An embedded base64 JPEG (`DEFAULT_IMAGE_B64`) provides a default sample image on load.
 - Color clustering uses a custom deterministic K-means implementation (no external lib).
 - Triangle geometry is built by `buildTriangles()` which creates a rotated asanoha-style lattice.
