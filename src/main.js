@@ -44,7 +44,7 @@ if (mitsukeInput) {
   syncPatternThicknessPlaceholder();
 }
 
-const autoTriggerIds = ['sizeA', 'sizeB', 'pitch', 'frameWidth', 'patternThickness', 'backfillOpacity', 'numInsertColors'];
+const autoTriggerIds = ['sizeA', 'sizeB', 'pitch', 'frameWidth', 'patternThickness', 'numInsertColors'];
 for (const id of autoTriggerIds) {
   const el = document.getElementById(id);
   if (el) {
@@ -60,7 +60,7 @@ function setupColorSync(colorId, hexId) {
 
   colorInput.addEventListener('input', (e) => {
     hexInput.value = e.target.value.toUpperCase();
-    if (sourceImg) processBtn.click();
+    if (sourceImg) renderOnly();
   });
 
   hexInput.addEventListener('input', (e) => {
@@ -74,7 +74,7 @@ function setupColorSync(colorId, hexId) {
         value = '#' + value[1] + value[1] + value[2] + value[2] + value[3] + value[3];
       }
       colorInput.value = value;
-      if (sourceImg) processBtn.click();
+      if (sourceImg) renderOnly();
     }
   });
 }
@@ -82,6 +82,33 @@ function setupColorSync(colorId, hexId) {
 setupColorSync('frameColor', 'frameColorHex');
 setupColorSync('jigumiColor', 'jigumiColorHex');
 setupColorSync('backfillColor', 'backfillColorHex');
+
+document.getElementById('backfillOpacity').addEventListener('input', () => {
+  if (sourceImg) renderOnly();
+});
+
+document.getElementById('showImage').addEventListener('change', () => {
+  if (sourceImg) renderOnly();
+});
+document.getElementById('showPattern').addEventListener('change', () => {
+  if (sourceImg) renderOnly();
+});
+document.getElementById('imageFit').addEventListener('change', () => {
+  if (sourceImg) processBtn.click();
+});
+
+function renderOnly() {
+  if (!lastProcessedTriangles || !lastRenderParams || !outputCanvas || !lastCounts) return;
+
+  lastRenderParams.frameColor = document.getElementById('frameColor').value;
+  lastRenderParams.jigumiColor = document.getElementById('jigumiColor').value;
+  lastRenderParams.backfillColor = document.getElementById('backfillColor').value;
+  lastRenderParams.backfillOpacity = parseFloat(document.getElementById('backfillOpacity').value) || 0.5;
+  lastRenderParams.showImage = document.getElementById('showImage').checked;
+  lastRenderParams.showPattern = document.getElementById('showPattern').checked;
+
+  handleColorChange('__render_only__', '');
+}
 
 function loadDefaultImage() {
   const img = new Image();
@@ -241,7 +268,11 @@ processBtn.addEventListener('click', async () => {
   octx.clip();
 
   for (const { t, avg, isPatterned } of processedTriangles) {
-    const hexColor = rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b));
+    const rawHex = rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b)).toUpperCase();
+    const patternKey = t.pattern > 0 ? "Pattern " + t.pattern : "Flat/None";
+    const combKey = t.pattern > 0 ? (patternKey + "_" + rawHex) : "Flat/None";
+    
+    const hexColor = (t.pattern > 0 && userColorOverrides[combKey]) ? userColorOverrides[combKey] : rawHex;
     const v = t.vertices;
 
     octx.save();
@@ -268,9 +299,7 @@ processBtn.addEventListener('click', async () => {
     }
     octx.restore();
 
-    const patternKey = pNum > 0 ? "Pattern " + pNum : "Flat/None";
-    const colorKey = pNum > 0 ? hexColor.toUpperCase() : "N/A";
-    const combKey = pNum > 0 ? (patternKey + "_" + colorKey) : "Flat/None";
+    const colorKey = pNum > 0 ? rawHex : "N/A";
 
     if (!counts[combKey]) {
       counts[combKey] = { pattern: patternKey, color: colorKey, count: 0 };
@@ -331,10 +360,23 @@ processBtn.addEventListener('click', async () => {
   renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, currentZoomLevel, downloadImgBtn, downloadCsvBtn, userColorOverrides, originalColorMap });
 });
 
-function handleColorChange(key, newColor) {
+function handleColorChange(combKey, newColor) {
   if (!lastProcessedTriangles || !lastRenderParams || !outputCanvas) return;
 
-  userColorOverrides[key] = newColor.toUpperCase();
+  // Special key for render-only (no color change, just re-render with current overrides)
+  if (combKey === '__render_only__') {
+    // Just re-render with current userColorOverrides
+  } else {
+    const color = newColor.toUpperCase();
+    const originalColor = originalColorMap[combKey]?.toUpperCase();
+    
+    // Store override by combKey (pattern_originalHex)
+    if (originalColor && color === originalColor) {
+      delete userColorOverrides[combKey];
+    } else {
+      userColorOverrides[combKey] = color;
+    }
+  }
 
   const octx = outputCanvas.getContext('2d');
   const { W, H, frameWidthPx, innerWpx, innerHpx, showImage, showPattern, backfillColor, backfillOpacity, patternLinePx, jigumiColor, frameColor, mitsukePx } = lastRenderParams;
@@ -376,14 +418,15 @@ function handleColorChange(key, newColor) {
     const isInverted = t.isInverted;
     const v = t.vertices;
 
+    const rawHex = rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b)).toUpperCase();
     const patternKey = pNum > 0 ? "Pattern " + pNum : "Flat/None";
-    const combKey = pNum > 0 ? (patternKey + "_" + rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b)).toUpperCase()) : "Flat/None";
+    const combKey = pNum > 0 ? (patternKey + "_" + rawHex) : "Flat/None";
 
     let hexColor;
     if (pNum > 0 && userColorOverrides[combKey]) {
       hexColor = userColorOverrides[combKey];
     } else {
-      hexColor = rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b));
+      hexColor = rawHex;
     }
 
     octx.save();
@@ -417,53 +460,11 @@ function handleColorChange(key, newColor) {
 
   octx.restore();
 
-  const resultsEl = document.getElementById('results');
-  const rows = resultsEl.querySelectorAll('tbody tr');
-  rows.forEach(row => {
-    const colorCell = row.querySelector('.color-input-group');
-    if (colorCell) {
-      const key = colorCell.dataset.key;
-      if (key) {
-        const picker = colorCell.querySelector('.result-color-picker');
-        const hexInput = colorCell.querySelector('.result-color-hex');
-        const resetBtn = colorCell.querySelector('.reset-color-btn');
-        const defaultColor = originalColorMap[key];
-        const currentColor = userColorOverrides[key] || defaultColor;
-        const isDefault = !userColorOverrides[key];
-
-        if (picker) picker.value = currentColor;
-        if (hexInput) hexInput.value = currentColor;
-        if (resetBtn && isDefault) {
-          resetBtn.remove();
-        } else if (!resetBtn && !isDefault) {
-          const newResetBtn = document.createElement('button');
-          newResetBtn.type = 'button';
-          newResetBtn.className = 'reset-color-btn';
-          newResetBtn.dataset.key = key;
-          newResetBtn.title = 'Reset to default';
-          newResetBtn.textContent = '↩';
-          newResetBtn.style.cssText = 'background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.75rem;padding:0;margin-left:4px;';
-          hexInput.parentElement.appendChild(newResetBtn);
-          newResetBtn.addEventListener('click', (e) => {
-            const group = e.target.closest('.color-input-group');
-            const k = group.dataset.key;
-            const dColor = originalColorMap[k];
-            if (!dColor) return;
-            const p = group.querySelector('.result-color-picker');
-            const h = group.querySelector('.result-color-hex');
-            p.value = dColor;
-            h.value = dColor;
-            e.target.remove();
-            delete userColorOverrides[k];
-            if (colorChangeCallback) colorChangeCallback(k, dColor);
-          });
-        }
-      }
-    }
-  });
-
   const wrap = canvasArea.querySelector('.canvas-wrap');
   applyZoomStyle(outputCanvas, wrap);
+
+  // Re-render results table to update UI (color inputs, reset buttons)
+  renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, currentZoomLevel, downloadImgBtn, downloadCsvBtn, userColorOverrides, originalColorMap, originalColorByPattern });
 }
 
 downloadImgBtn.addEventListener('click', () => {
