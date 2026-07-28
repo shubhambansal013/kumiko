@@ -1,7 +1,8 @@
 export function assignPattern(lightness, activePatterns) {
   if (!activePatterns || activePatterns.length === 0) return null;
   const bucketSize = 1 / activePatterns.length;
-  const bucketIdx = Math.min(activePatterns.length - 1, Math.floor(lightness / bucketSize));
+  const rawIdx = Math.floor(lightness / bucketSize);
+  const bucketIdx = activePatterns.length - 1 - Math.min(activePatterns.length - 1, rawIdx);
   return activePatterns[bucketIdx] ?? null;
 }
 

@@ -436,3 +436,37 @@ export function buildPatternSvg(index, w, h, fgColor, bgColor, isInverted, lineW
     + pathsSvg
     + `</svg>`;
 }
+
+export function computePatternDarkness(ctx, index, lineWidth) {
+  const pat = REAL_PATTERNS[index - 1];
+  if (!pat) return 0;
+  ctx.clearRect(0, 0, pat.w, pat.h);
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = lineWidth;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  pat.paths.forEach(d => {
+    ctx.stroke(new Path2D(d));
+  });
+  const imageData = ctx.getImageData(0, 0, pat.w, pat.h);
+  const totalPixels = pat.w * pat.h;
+  let filledPixels = 0;
+  for (let i = 0; i < imageData.data.length; i += 4) {
+    if (imageData.data[i + 3] > 0) filledPixels++;
+  }
+  return filledPixels / totalPixels;
+}
+
+export function sortPatternsByDensity(patternIndices, lineWidth) {
+  if (typeof document === 'undefined') return patternIndices;
+  const canvas = document.createElement('canvas');
+  canvas.width = 288;
+  canvas.height = 250;
+  const ctx = canvas.getContext('2d');
+  const scored = patternIndices.map(i => ({
+    index: i,
+    darkness: computePatternDarkness(ctx, i, lineWidth),
+  }));
+  scored.sort((a, b) => a.darkness - b.darkness);
+  return scored.map(p => p.index);
+}

@@ -3,7 +3,7 @@ import { DEFAULT_IMAGE_B64 } from './default-image.js';
 import { rgbToHex } from './utils.js';
 import { polygonBoundsAndAvgColor } from './geometry.js';
 import { generateLockedGrid } from './grid.js';
-import { paintPatternTile } from './patterns.js';
+import { paintPatternTile, sortPatternsByDensity } from './patterns.js';
 import { selectedPatterns, renderGallery, setupGalleryButtons } from './gallery.js';
 import { drawPreview, applyZoomStyle, renderOutput } from './renderer.js';
 
@@ -153,7 +153,7 @@ processBtn.addEventListener('click', async () => {
   }
 
   const backfillColor = document.getElementById('backfillColor').value;
-  const activePatterns = Array.from(selectedPatterns.values());
+  const activePatterns = sortPatternsByDensity(Array.from(selectedPatterns.values()), patternLinePx);
 
   const gridTriangles = generateLockedGrid(
     innerWpx, innerHpx, sizeB, sizeA,

@@ -53,26 +53,26 @@ describe('assignPattern', () => {
     expect(assignPattern(1, [10])).toBe(10);
   });
 
-  it('two patterns split at 0.5', () => {
-    expect(assignPattern(0.0, [0, 1])).toBe(0);
-    expect(assignPattern(0.49, [0, 1])).toBe(0);
-    expect(assignPattern(0.5, [0, 1])).toBe(1);
-    expect(assignPattern(0.99, [0, 1])).toBe(1);
+  it('two patterns split at 0.5 (reversed for density)', () => {
+    expect(assignPattern(0.0, [0, 1])).toBe(1);
+    expect(assignPattern(0.49, [0, 1])).toBe(1);
+    expect(assignPattern(0.5, [0, 1])).toBe(0);
+    expect(assignPattern(0.99, [0, 1])).toBe(0);
   });
 
-  it('three patterns split at thirds', () => {
+  it('three patterns split at thirds (reversed for density)', () => {
     const p = [100, 200, 300];
-    expect(assignPattern(0.0, p)).toBe(100);
-    expect(assignPattern(0.32, p)).toBe(100);
+    expect(assignPattern(0.0, p)).toBe(300);
+    expect(assignPattern(0.32, p)).toBe(300);
     expect(assignPattern(0.34, p)).toBe(200);
     expect(assignPattern(0.65, p)).toBe(200);
-    expect(assignPattern(0.67, p)).toBe(300);
-    expect(assignPattern(1.0, p)).toBe(300);
+    expect(assignPattern(0.67, p)).toBe(100);
+    expect(assignPattern(1.0, p)).toBe(100);
   });
 
   it('clamps lightness to last bucket', () => {
-    expect(assignPattern(1.0, [0, 1])).toBe(1);
-    expect(assignPattern(10, [0, 1])).toBe(1);
+    expect(assignPattern(1.0, [0, 1])).toBe(0);
+    expect(assignPattern(10, [0, 1])).toBe(0);
   });
 });
 
@@ -373,8 +373,8 @@ describe('grid: pattern assignment', () => {
     const { innerW, innerH } = gridDims(5, 5);
     const dark = generateLockedGrid(innerW, innerH, 5, 5, [10, 20], () => 0.1);
     const bright = generateLockedGrid(innerW, innerH, 5, 5, [10, 20], () => 0.9);
-    expect(dark.some(t => t.pattern === 10)).toBe(true);
-    expect(bright.some(t => t.pattern === 20)).toBe(true);
+    expect(dark.some(t => t.pattern === 20)).toBe(true);
+    expect(bright.some(t => t.pattern === 10)).toBe(true);
   });
 });
 
