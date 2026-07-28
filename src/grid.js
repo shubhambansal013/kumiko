@@ -6,15 +6,16 @@ export function assignPattern(lightness, activePatterns) {
 }
 
 /**
- * Generate a proper equilateral-triangle asanoha lattice.
+ * Generate a proper equilateral-triangle asanoha lattice with vertical-base triangles.
  *
  * Geometry (equilateral triangles with side = pitch):
- *   horizontal vertex spacing = pitch * 2/sqrt(3)
- *   vertical vertex spacing   = pitch
- *   odd rows offset by pitchX / 2
+ *   horizontal spacing between columns = pitch * sqrt(3) / 2
+ *   vertical spacing within columns     = pitch
+ *   odd columns offset by h / 2
  *
- * Odd rows include an extra vertex at -pitchX/2 so left-edge triangles
- * are complete; the rendering clips to the inner area.
+ * Iterates over columns (not rows) so triangle bases are vertical.
+ * Odd columns include extra vertices at -h/2 and (numRows+0.5)*h
+ * so edge triangles are complete; the rendering clips to the inner area.
  *
  * @param {number} innerW  – inner panel width in px (after frame)
  * @param {number} innerH  – inner panel height in px (after frame)
@@ -28,22 +29,20 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
   const pitchX = innerW / numCols;
   const h = innerH / numRows;
 
-  const rows = numRows + 1;
-
   const vertices = [];
-  for (let row = 0; row < rows; row++) {
-    vertices[row] = [];
-    const isOdd = row % 2 === 1;
+  for (let col = 0; col <= numCols; col++) {
+    vertices[col] = [];
+    const isOdd = col % 2 === 1;
     if (isOdd) {
-      for (let col = 0; col <= numCols + 1; col++) {
-        vertices[row][col] = {
-          x: col * pitchX - pitchX / 2,
-          y: row * h,
+      for (let row = 0; row <= numRows + 1; row++) {
+        vertices[col][row] = {
+          x: col * pitchX,
+          y: row * h - h / 2,
         };
       }
     } else {
-      for (let col = 0; col <= numCols; col++) {
-        vertices[row][col] = {
+      for (let row = 0; row <= numRows; row++) {
+        vertices[col][row] = {
           x: col * pitchX,
           y: row * h,
         };
@@ -53,18 +52,18 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
 
   const triangles = [];
 
-  for (let row = 0; row < numRows; row++) {
-    const isOdd = row % 2 === 1;
+  for (let col = 0; col < numCols; col++) {
+    const isOdd = col % 2 === 1;
 
     if (!isOdd) {
-      for (let c = 0; c < numCols; c++) {
-        const top = vertices[row];
-        const bot = vertices[row + 1];
+      for (let k = 0; k < numRows; k++) {
+        const left = vertices[col];
+        const right = vertices[col + 1];
 
         {
-          const a = top[c];
-          const b = top[c + 1];
-          const d = bot[c + 1];
+          const a = left[k];
+          const b = left[k + 1];
+          const d = right[k + 1];
           const cx = (a.x + b.x + d.x) / 3;
           const cy = (a.y + b.y + d.y) / 3;
           const lightness = getLightnessAt(cx, cy);
@@ -72,25 +71,30 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
           triangles.push({
             vertices: [a, b, d],
             center: { x: cx, y: cy },
-            col: c, row,
+            col, row: k,
             isInverted: false,
             lightness,
             pattern,
           });
         }
+      }
+
+      for (let k = 0; k <= numRows; k++) {
+        const left = vertices[col];
+        const right = vertices[col + 1];
 
         {
-          const a = top[c];
-          const d = bot[c];
-          const e = bot[c + 1];
-          const cx = (a.x + d.x + e.x) / 3;
-          const cy = (a.y + d.y + e.y) / 3;
+          const a = right[k];
+          const b = right[k + 1];
+          const d = left[k];
+          const cx = (a.x + b.x + d.x) / 3;
+          const cy = (a.y + b.y + d.y) / 3;
           const lightness = getLightnessAt(cx, cy);
           const pattern = assignPattern(lightness, activePatterns);
           triangles.push({
-            vertices: [a, d, e],
+            vertices: [a, b, d],
             center: { x: cx, y: cy },
-            col: c, row,
+            col, row: k,
             isInverted: true,
             lightness,
             pattern,
@@ -98,14 +102,14 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
         }
       }
     } else {
-      for (let c = 0; c <= numCols; c++) {
-        const top = vertices[row];
-        const bot = vertices[row + 1];
+      for (let k = 0; k <= numRows; k++) {
+        const left = vertices[col];
+        const right = vertices[col + 1];
 
-        if (c <= numCols) {
-          const a = top[c];
-          const b = top[c + 1];
-          const d = bot[c];
+        {
+          const a = left[k];
+          const b = left[k + 1];
+          const d = right[k];
           const cx = (a.x + b.x + d.x) / 3;
           const cy = (a.y + b.y + d.y) / 3;
           const lightness = getLightnessAt(cx, cy);
@@ -113,7 +117,7 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
           triangles.push({
             vertices: [a, b, d],
             center: { x: cx, y: cy },
-            col: c, row,
+            col, row: k,
             isInverted: true,
             lightness,
             pattern,
@@ -121,25 +125,27 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
         }
       }
 
-      for (let c = 0; c < numCols; c++) {
-        const top = vertices[row];
-        const bot = vertices[row + 1];
+      for (let k = 0; k < numRows; k++) {
+        const left = vertices[col];
+        const right = vertices[col + 1];
 
-        const a = bot[c];
-        const b = bot[c + 1];
-        const d = top[c + 1];
-        const cx = (a.x + b.x + d.x) / 3;
-        const cy = (a.y + b.y + d.y) / 3;
-        const lightness = getLightnessAt(cx, cy);
-        const pattern = assignPattern(lightness, activePatterns);
-        triangles.push({
-          vertices: [a, b, d],
-          center: { x: cx, y: cy },
-          col: c, row,
-          isInverted: false,
-          lightness,
-          pattern,
-        });
+        {
+          const a = right[k];
+          const b = right[k + 1];
+          const d = left[k + 1];
+          const cx = (a.x + b.x + d.x) / 3;
+          const cy = (a.y + b.y + d.y) / 3;
+          const lightness = getLightnessAt(cx, cy);
+          const pattern = assignPattern(lightness, activePatterns);
+          triangles.push({
+            vertices: [a, b, d],
+            center: { x: cx, y: cy },
+            col, row: k,
+            isInverted: false,
+            lightness,
+            pattern,
+          });
+        }
       }
     }
   }
