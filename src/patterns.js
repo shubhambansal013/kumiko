@@ -377,8 +377,8 @@ function drawMotif(ctx, w, h, fg, index, isInverted) {
   const scale = h / pat.w;
   ctx.translate(w / 2, h / 2);
   ctx.rotate(-Math.PI / 2);
-  ctx.translate(-pat.w / 2, -pat.h / 2);
   ctx.scale(scale, scale);
+  ctx.translate(-pat.w / 2, -pat.h / 2);
   ctx.strokeStyle = fg;
   ctx.lineWidth = 1.5;
   ctx.lineCap = "round";
