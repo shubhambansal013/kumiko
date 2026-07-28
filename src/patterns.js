@@ -365,87 +365,69 @@ export const REAL_PATTERNS = [
   }
 ];
 
-const OUTLINE_PREFIX = "M.037 249.12 144.037 0l.293.212L288.075 249.48l-.33.148L0 249.48";
-const SCALE_X = 100 / 288.075;
-const SCALE_Y = 100 / 249.628;
-
-function normalizePath(d) {
-  let i = 0;
-  return d.replace(/(-?\d*\.?\d+)/g, (match) => {
-    const n = parseFloat(match);
-    if (isNaN(n)) return match;
-    const scale = (i % 2 === 0) ? SCALE_X : SCALE_Y;
-    i++;
-    return String(+(n * scale).toFixed(4));
+function drawMotif(ctx, w, h, fg, index, isInverted) {
+  const pat = REAL_PATTERNS[index];
+  if (!pat) return;
+  ctx.save();
+  if (isInverted) {
+    ctx.translate(w / 2, h / 2);
+    ctx.rotate(Math.PI);
+    ctx.translate(-w / 2, -h / 2);
+  }
+  ctx.scale(w / pat.w, h / pat.h);
+  ctx.strokeStyle = fg;
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  pat.paths.forEach(d => {
+    ctx.stroke(new Path2D(d));
   });
+  ctx.restore();
 }
 
-export const NORMALIZED_PATTERNS = REAL_PATTERNS.map(p => {
-  const inner = [];
-  let hasOutline = false;
-  p.paths.forEach(d => {
-    if (d.startsWith(OUTLINE_PREFIX)) {
-      hasOutline = true;
-      const rest = d.substring(OUTLINE_PREFIX.length).trim();
-      if (rest.length > 0) {
-        inner.push(rest.startsWith('m') || rest.startsWith('M') ? rest : "M0 100 " + rest);
-      }
-    } else {
-      inner.push(d);
-    }
-  });
-  return { inner, hasOutline };
-});
+export function paintPatternTile(ctx, index, x0, y0, w, h, fgColor, bgColor, isInverted, opacity) {
+  ctx.save();
+  ctx.translate(x0, y0);
+  ctx.globalAlpha = opacity;
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, w, h);
+  ctx.globalAlpha = 1;
+  ctx.beginPath();
+  ctx.rect(0, 0, w, h);
+  ctx.clip();
+  drawMotif(ctx, w, h, fgColor, index - 1, isInverted);
+  ctx.restore();
+}
 
-export const PATTERN_ROTATIONS = [330, 150, 90, 30, 210, 270];
+export function buildPatternSvg(index, w, h, fgColor, bgColor, isInverted) {
+  const pat = REAL_PATTERNS[index - 1];
+  if (!pat) return '';
 
-export function buildPatternSvg(index, w, h, fgColor, bgColor, isInverted, opacity, thicknessPx, jigumiColor, rotationIndex) {
-  const np = NORMALIZED_PATTERNS[index - 1];
-  if (!np) return '';
-
-  const rot = PATTERN_ROTATIONS[rotationIndex % 6];
-  let transform = `rotate(${rot} 50 50)`;
-  if (isInverted) {
-    transform = `scale(1 -1) ${transform}`;
-  }
+  const scaleX = w / pat.w;
+  const scaleY = h / pat.h;
 
   let pathsSvg = '';
-  if (np.hasOutline) {
-    pathsSvg += `<path d="M0 0 L100 0 L0 100 Z" fill="none" stroke="${jigumiColor || fgColor}" stroke-width="1" transform="${transform}"/>`;
-  }
-  np.inner.forEach(d => {
-    pathsSvg += `<path d="${normalizePath(d)}" fill="none" stroke="${fgColor}" stroke-width="1" transform="${transform}"/>`;
+  pat.paths.forEach(d => {
+    pathsSvg += `<path d="${d}" fill="none" stroke="${fgColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"`;
+    const transforms = [];
+    if (isInverted) {
+      transforms.push(`translate(${w / 2} ${h / 2}) rotate(180) translate(${-w / 2} ${-h / 2})`);
+    }
+    transforms.push(`scale(${scaleX} ${scaleY})`);
+    pathsSvg += ` transform="${transforms.join(' ')}"`;
+    pathsSvg += `/>`;
   });
 
   let hexToRgba = (hex, alpha) => {
-    const h = hex.replace('#', '');
-    const r = parseInt(h.substring(0, 2), 16);
-    const g = parseInt(h.substring(2, 4), 16);
-    const b = parseInt(h.substring(4, 6), 16);
+    const clean = hex.replace('#', '');
+    const r = parseInt(clean.substring(0, 2), 16);
+    const g = parseInt(clean.substring(2, 4), 16);
+    const b = parseInt(clean.substring(4, 6), 16);
     return `rgba(${r},${g},${b},${alpha})`;
   };
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${w}" height="${h}">`
-    + `<rect width="100" height="100" fill="${hexToRgba(bgColor, opacity)}"/>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">`
+    + `<rect width="${w}" height="${h}" fill="${hexToRgba(bgColor, 1)}"/>`
     + pathsSvg
     + `</svg>`;
-}
-
-export function paintPatternTile(ctx, index, x0, y0, w, h, fgColor, bgColor, isInverted, opacity, thicknessPx, isRotatedGrid, jigumiColor, rotationIndex) {
-  return new Promise((resolve) => {
-    const svg = buildPatternSvg(index, w, h, fgColor, bgColor, isInverted, opacity, thicknessPx, jigumiColor, rotationIndex);
-    const blob = new Blob([svg], { type: 'image/svg+xml' });
-    const url = URL.createObjectURL(blob);
-    const img = new Image();
-    img.onload = () => {
-      ctx.drawImage(img, x0, y0, w, h);
-      URL.revokeObjectURL(url);
-      resolve();
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      resolve();
-    };
-    img.src = url;
-  });
 }

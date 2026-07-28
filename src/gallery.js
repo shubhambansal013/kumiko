@@ -10,7 +10,7 @@ export function renderGallery() {
     tile.className = 'gtile' + (selectedPatterns.has(i) ? ' selected' : '');
     tile.dataset.i = i;
 
-    const svg = buildPatternSvg(i, 90, 90, '#e8ddc9', '#241f19', false, 1, 1, '#241f19', 0);
+    const svg = buildPatternSvg(i, 90, 90, '#e8ddc9', '#241f19', false);
     const img = document.createElement('img');
     img.src = 'data:image/svg+xml,' + encodeURIComponent(svg);
     img.style.width = '90px';

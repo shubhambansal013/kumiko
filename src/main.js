@@ -210,17 +210,13 @@ processBtn.addEventListener('click', async () => {
     const pNum = t.pattern;
 
     if (showPattern && pNum > 0) {
-      const customThicknessVal = parseFloat(document.getElementById('patternThickness').value);
-      const chosenThickness = isNaN(customThicknessVal) ? mitsuke : customThicknessVal;
-      const thicknessPx = chosenThickness * pxPerMM;
       const opacityVal = parseFloat(document.getElementById('backfillOpacity').value);
       const opacity = isNaN(opacityVal) ? 0.5 : opacityVal;
-      const rotationIndex = (t.col + t.row) % 6;
 
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
       v.forEach(p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); });
 
-      await paintPatternTile(octx, pNum, minX, minY, Math.max(1, maxX - minX), Math.max(1, maxY - minY), hexColor, backfillColor, t.isInverted, opacity, thicknessPx, true, jigumiColor, rotationIndex);
+      paintPatternTile(octx, pNum, minX, minY, Math.max(1, maxX - minX), Math.max(1, maxY - minY), hexColor, backfillColor, t.isInverted, opacity);
       totalPatterned++;
     } else {
       totalFlat++;
