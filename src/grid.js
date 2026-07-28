@@ -66,13 +66,11 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
           const a = left[k];
           const b = left[k + 1];
           const d = right[k + 1];
-          const cx = (a.x + b.x + d.x) / 3;
-          const cy = (a.y + b.y + d.y) / 3;
           const lightness = getLightnessAt([a, b, d]);
           const pattern = assignPattern(lightness, activePatterns);
           triangles.push({
             vertices: [a, b, d],
-            center: { x: cx, y: cy },
+            center: { x: (a.x + b.x + d.x) / 3, y: (a.y + b.y + d.y) / 3 },
             col, row: k,
             isInverted: true,
             lightness,
@@ -89,13 +87,11 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
           const a = right[k];
           const b = right[k + 1];
           const d = left[k];
-          const cx = (a.x + b.x + d.x) / 3;
-          const cy = (a.y + b.y + d.y) / 3;
           const lightness = getLightnessAt([a, b, d]);
           const pattern = assignPattern(lightness, activePatterns);
           triangles.push({
             vertices: [a, b, d],
-            center: { x: cx, y: cy },
+            center: { x: (a.x + b.x + d.x) / 3, y: (a.y + b.y + d.y) / 3 },
             col, row: k,
             isInverted: false,
             lightness,
@@ -112,13 +108,11 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
           const a = left[k];
           const b = left[k + 1];
           const d = right[k];
-          const cx = (a.x + b.x + d.x) / 3;
-          const cy = (a.y + b.y + d.y) / 3;
           const lightness = getLightnessAt([a, b, d]);
           const pattern = assignPattern(lightness, activePatterns);
           triangles.push({
             vertices: [a, b, d],
-            center: { x: cx, y: cy },
+            center: { x: (a.x + b.x + d.x) / 3, y: (a.y + b.y + d.y) / 3 },
             col, row: k,
             isInverted: true,
             lightness,
@@ -135,13 +129,11 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
           const a = right[k];
           const b = right[k + 1];
           const d = left[k + 1];
-          const cx = (a.x + b.x + d.x) / 3;
-          const cy = (a.y + b.y + d.y) / 3;
           const lightness = getLightnessAt([a, b, d]);
           const pattern = assignPattern(lightness, activePatterns);
           triangles.push({
             vertices: [a, b, d],
-            center: { x: cx, y: cy },
+            center: { x: (a.x + b.x + d.x) / 3, y: (a.y + b.y + d.y) / 3 },
             col, row: k,
             isInverted: false,
             lightness,
