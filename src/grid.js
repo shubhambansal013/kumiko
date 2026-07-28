@@ -29,6 +29,10 @@ export function assignMultiDimPattern(triFeatures, activePatterns, patternFeatur
   const wDet = (weights && weights.detail) || 0;
   const wC = (weights && weights.color) || 0;
 
+  // Non-linear: high-chroma triangles boost detail weight so colorful textured
+  // areas get intricate patterns, while flat-color areas favor density matching.
+  const effectiveDetailWeight = wDet * (1 + wC * triChroma);
+
   let bestDist = Infinity;
   let bestIdx = activePatterns[0];
   for (const patIdx of activePatterns) {
@@ -36,7 +40,7 @@ export function assignMultiDimPattern(triFeatures, activePatterns, patternFeatur
     if (!pf) continue;
     const dDen = triDensity - pf.density;
     const dDet = triDetail - pf.detail;
-    const dist = wD * dDen * dDen + wDet * dDet * dDet + wC * triChroma * pf.density;
+    const dist = wD * dDen * dDen + effectiveDetailWeight * dDet * dDet;
     if (dist < bestDist) { bestDist = dist; bestIdx = patIdx; }
   }
   return bestIdx;

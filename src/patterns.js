@@ -365,8 +365,8 @@ export const REAL_PATTERNS = [
   }
 ];
 
-function svgPathLength(pathStr) {
-  let totalLen = 0;
+function analyzePath(pathStr) {
+  let totalLen = 0, segCount = 0;
   let cx = 0, cy = 0, sx = 0, sy = 0;
   let cmd = '', curNum = '';
   let nums = [];
@@ -381,7 +381,7 @@ function svgPathLength(pathStr) {
       const nx = rel ? cx + nums[k] : nums[k];
       const ny = rel ? cy + nums[k + 1] : nums[k + 1];
       if (move && k === 0) { sx = nx; sy = ny; }
-      else { totalLen += Math.hypot(nx - cx, ny - cy); }
+      else { totalLen += Math.hypot(nx - cx, ny - cy); segCount++; }
       cx = nx; cy = ny;
       k += 2;
     }
@@ -394,7 +394,7 @@ function svgPathLength(pathStr) {
   }
   flush();
   if (cmd) exec();
-  return totalLen;
+  return { totalLen, segCount };
 }
 
 let _patternFeatures = null;
@@ -414,8 +414,16 @@ export function getPatternFeatures() {
     let drawn = 0;
     for (let i = 3; i < data.length; i += 4) if (data[i] > 0) drawn++;
     const density = drawn / (144 * 125);
-    let detail = 0;
-    p.paths.forEach(d => { detail += svgPathLength(d); });
+
+    let totalLen = 0, totalSeg = 0;
+    p.paths.forEach(d => {
+      const r = analyzePath(d);
+      totalLen += r.totalLen;
+      totalSeg += r.segCount;
+    });
+    // Detail combines path length (longer = more complex) and segment count (more strokes = more intricate)
+    const detail = totalLen * 0.4 + totalSeg * 20;
+
     return { index: idx, density, detail };
   });
 

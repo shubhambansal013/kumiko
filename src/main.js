@@ -176,6 +176,27 @@ processBtn.addEventListener('click', async () => {
   const wDetail = parseFloat(document.getElementById('wDetail')?.value || 30) / 100;
   const wColor = parseFloat(document.getElementById('wColor')?.value || 20) / 100;
 
+  // Adaptive stdDev normalization — estimate 95th percentile from image patches
+  const maxStdDev = (() => {
+    const step = 20, radius = 4;
+    const vals = [];
+    for (let y = radius; y + radius < H_sample; y += step) {
+      for (let x = radius; x + radius < W_sample; x += step) {
+        const samples = [];
+        for (let dy = -radius; dy <= radius; dy++) {
+          for (let dx = -radius; dx <= radius; dx++) {
+            const idx = ((y + dy) * W_sample + (x + dx)) * 4;
+            samples.push(0.299 * imgData[idx] + 0.587 * imgData[idx + 1] + 0.114 * imgData[idx + 2]);
+          }
+        }
+        const m = samples.reduce((a, b) => a + b, 0) / samples.length;
+        vals.push(Math.sqrt(samples.reduce((s, v) => s + (v - m) ** 2, 0) / samples.length));
+      }
+    }
+    vals.sort((a, b) => a - b);
+    return Math.max(1, vals[Math.floor(0.95 * vals.length)]);
+  })();
+
   const gridTriangles = generateLockedGrid(
     innerWpx, innerHpx, sizeB, sizeA,
     activePatterns,
@@ -187,7 +208,7 @@ processBtn.addEventListener('click', async () => {
       const avg = polygonBoundsAndAvgColor(scaled, imgData, W_sample, H_sample);
       if (!avg) return { lightness: 0.5, stdDev: 0, chroma: 0 };
       const lightness = (avg.r + avg.g + avg.b) / (3 * 255);
-      const stdDev = (avg.stdDev || 0) / 128;
+      const stdDev = Math.min(1, (avg.stdDev || 0) / maxStdDev);
       const chroma = (Math.max(avg.r, avg.g, avg.b) - Math.min(avg.r, avg.g, avg.b)) / 255;
       return { lightness, stdDev, chroma };
     },
@@ -314,7 +335,11 @@ downloadImgBtn.addEventListener('click', () => {
 downloadCsvBtn.addEventListener('click', () => {
   if (!lastCounts) return;
   let csv = 'pattern,color,pieces,percent\n';
-  Object.keys(lastCounts.counts).sort().forEach(key => {
+  Object.keys(lastCounts.counts).sort((a, b) => {
+    const ca = lastCounts.counts[a].color, cb = lastCounts.counts[b].color;
+    if (ca !== cb) return ca.localeCompare(cb);
+    return a.localeCompare(b);
+  }).forEach(key => {
     const item = lastCounts.counts[key];
     const pct = lastCounts.total > 0 ? ((item.count / lastCounts.total) * 100).toFixed(1) : '0.0';
     csv += `"${item.pattern}","${item.color}",${item.count},${pct}\n`;

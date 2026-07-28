@@ -57,14 +57,18 @@ export function renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, 
     <div class="stat"><b>${pitch} mm</b>Pitch</div>
   </div>`;
 
-  html += `<table><thead><tr><th>Pattern</th><th>Color</th><th>Pieces</th><th>% of panel</th></tr></thead><tbody>`;
-  Object.keys(counts).sort().forEach(key => {
+  html += `<table><thead><tr><th>Color</th><th>Pattern</th><th>Pieces</th><th>% of panel</th></tr></thead><tbody>`;
+  Object.keys(counts).sort((a, b) => {
+    const ca = counts[a].color, cb = counts[b].color;
+    if (ca !== cb) return ca.localeCompare(cb);
+    return a.localeCompare(b);
+  }).forEach(key => {
     const item = counts[key];
     const pct = total > 0 ? ((item.count / total) * 100).toFixed(1) : '0.0';
     const colorCell = item.color === "N/A" ? "" : `<span class="swatch" style="background:${item.color}"></span>${item.color}`;
     html += `<tr>
-      <td>${item.pattern}</td>
       <td>${colorCell}</td>
+      <td>${item.pattern}</td>
       <td>${item.count}</td>
       <td>${pct}%</td>
     </tr>`;
