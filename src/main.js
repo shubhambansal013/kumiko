@@ -5,7 +5,7 @@ import { polygonBoundsAndAvgColor } from './geometry.js';
 import { generateLockedGrid } from './grid.js';
 import { paintPatternTile, sortPatternsByDensity } from './patterns.js';
 import { selectedPatterns, renderGallery, setupGalleryButtons } from './gallery.js';
-import { drawPreview, applyZoomStyle, renderOutput, setColorChangeCallback, setDefaultColors } from './renderer.js';
+import { drawPreview, applyZoomStyle, renderOutput, setColorChangeCallback } from './renderer.js';
 import { getImageCrop } from './image-fit.js';
 
 const fileInput = document.getElementById('fileInput');
@@ -27,8 +27,8 @@ let sourceImg = null;
 let outputCanvas = null;
 let lastCounts = null;
 let lastProcessedTriangles = null;
-let lastColorMap = null;
-let lastDefaultColors = null;
+let originalColorMap = {};
+let userColorOverrides = {};
 let lastRenderParams = null;
 
 function syncPatternThicknessPlaceholder() {
@@ -308,12 +308,11 @@ processBtn.addEventListener('click', async () => {
   };
 
   lastProcessedTriangles = processedTriangles;
-  lastColorMap = {};
-  lastDefaultColors = {};
+
+  originalColorMap = {};
   Object.keys(counts).forEach(key => {
     if (counts[key].color !== "N/A") {
-      lastColorMap[key] = counts[key].color.toUpperCase();
-      lastDefaultColors[key] = counts[key].color.toUpperCase();
+      originalColorMap[key] = counts[key].color.toUpperCase();
     }
   });
 
@@ -327,19 +326,18 @@ processBtn.addEventListener('click', async () => {
     mitsukePx
   };
 
-  setDefaultColors(lastDefaultColors);
   setColorChangeCallback(handleColorChange);
 
-  renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, currentZoomLevel, downloadImgBtn, downloadCsvBtn });
+  renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, currentZoomLevel, downloadImgBtn, downloadCsvBtn, userColorOverrides, originalColorMap });
 });
 
 function handleColorChange(key, newColor) {
-  if (!lastColorMap || !lastProcessedTriangles || !lastRenderParams || !outputCanvas) return;
+  if (!lastProcessedTriangles || !lastRenderParams || !outputCanvas) return;
 
-  lastColorMap[key] = newColor.toUpperCase();
+  userColorOverrides[key] = newColor.toUpperCase();
 
   const octx = outputCanvas.getContext('2d');
-  const { W, H, frameWidthPx, innerWpx, innerHpx, showImage, showPattern, backfillColor, backfillOpacity, patternLinePx, jigumiColor, activePatterns, frameColor, mitsukePx, frameWidthMM, panelWidthMM, panelHeightMM, sizeA, sizeB, pitch } = lastRenderParams;
+  const { W, H, frameWidthPx, innerWpx, innerHpx, showImage, showPattern, backfillColor, backfillOpacity, patternLinePx, jigumiColor, frameColor, mitsukePx } = lastRenderParams;
 
   octx.clearRect(0, 0, W, H);
 
@@ -382,8 +380,8 @@ function handleColorChange(key, newColor) {
     const combKey = pNum > 0 ? (patternKey + "_" + rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b)).toUpperCase()) : "Flat/None";
 
     let hexColor;
-    if (pNum > 0 && lastColorMap[combKey]) {
-      hexColor = lastColorMap[combKey];
+    if (pNum > 0 && userColorOverrides[combKey]) {
+      hexColor = userColorOverrides[combKey];
     } else {
       hexColor = rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b));
     }
@@ -425,19 +423,40 @@ function handleColorChange(key, newColor) {
     const colorCell = row.querySelector('.color-input-group');
     if (colorCell) {
       const key = colorCell.dataset.key;
-      if (key && lastColorMap[key]) {
+      if (key) {
         const picker = colorCell.querySelector('.result-color-picker');
         const hexInput = colorCell.querySelector('.result-color-hex');
         const resetBtn = colorCell.querySelector('.reset-color-btn');
-        const defaultColor = lastDefaultColors[key];
-        const isDefault = defaultColor === lastColorMap[key].toUpperCase();
+        const defaultColor = originalColorMap[key];
+        const currentColor = userColorOverrides[key] || defaultColor;
+        const isDefault = !userColorOverrides[key];
 
-        if (picker) picker.value = lastColorMap[key];
-        if (hexInput) hexInput.value = lastColorMap[key];
-        if (resetBtn && !isDefault) {
-          // keep reset button
-        } else if (resetBtn && isDefault) {
+        if (picker) picker.value = currentColor;
+        if (hexInput) hexInput.value = currentColor;
+        if (resetBtn && isDefault) {
           resetBtn.remove();
+        } else if (!resetBtn && !isDefault) {
+          const newResetBtn = document.createElement('button');
+          newResetBtn.type = 'button';
+          newResetBtn.className = 'reset-color-btn';
+          newResetBtn.dataset.key = key;
+          newResetBtn.title = 'Reset to default';
+          newResetBtn.textContent = '↩';
+          newResetBtn.style.cssText = 'background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.75rem;padding:0;margin-left:4px;';
+          hexInput.parentElement.appendChild(newResetBtn);
+          newResetBtn.addEventListener('click', (e) => {
+            const group = e.target.closest('.color-input-group');
+            const k = group.dataset.key;
+            const dColor = originalColorMap[k];
+            if (!dColor) return;
+            const p = group.querySelector('.result-color-picker');
+            const h = group.querySelector('.result-color-hex');
+            p.value = dColor;
+            h.value = dColor;
+            e.target.remove();
+            delete userColorOverrides[k];
+            if (colorChangeCallback) colorChangeCallback(k, dColor);
+          });
         }
       }
     }
