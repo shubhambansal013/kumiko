@@ -45,7 +45,7 @@ if (mitsukeInput) {
   syncPatternThicknessPlaceholder();
 }
 
-const autoTriggerIds = ['sizeA', 'sizeB', 'pitch', 'frameWidth', 'patternThickness', 'backfillOpacity', 'numInsertColors'];
+const autoTriggerIds = ['sizeA', 'sizeB', 'pitch', 'frameWidth', 'patternThickness', 'numInsertColors'];
 for (const id of autoTriggerIds) {
   const el = document.getElementById(id);
   if (el) {
@@ -61,7 +61,7 @@ function setupColorSync(colorId, hexId) {
 
   colorInput.addEventListener('input', (e) => {
     hexInput.value = e.target.value.toUpperCase();
-    if (sourceImg) processBtn.click();
+    if (sourceImg) renderOnly();
   });
 
   hexInput.addEventListener('input', (e) => {
@@ -75,7 +75,7 @@ function setupColorSync(colorId, hexId) {
         value = '#' + value[1] + value[1] + value[2] + value[2] + value[3] + value[3];
       }
       colorInput.value = value;
-      if (sourceImg) processBtn.click();
+      if (sourceImg) renderOnly();
     }
   });
 }
@@ -83,6 +83,33 @@ function setupColorSync(colorId, hexId) {
 setupColorSync('frameColor', 'frameColorHex');
 setupColorSync('jigumiColor', 'jigumiColorHex');
 setupColorSync('backfillColor', 'backfillColorHex');
+
+document.getElementById('backfillOpacity').addEventListener('input', () => {
+  if (sourceImg) renderOnly();
+});
+
+document.getElementById('showImage').addEventListener('change', () => {
+  if (sourceImg) renderOnly();
+});
+document.getElementById('showPattern').addEventListener('change', () => {
+  if (sourceImg) renderOnly();
+});
+document.getElementById('imageFit').addEventListener('change', () => {
+  if (sourceImg) processBtn.click();
+});
+
+function renderOnly() {
+  if (!lastProcessedTriangles || !lastRenderParams || !outputCanvas || !lastCounts) return;
+
+  lastRenderParams.frameColor = document.getElementById('frameColor').value;
+  lastRenderParams.jigumiColor = document.getElementById('jigumiColor').value;
+  lastRenderParams.backfillColor = document.getElementById('backfillColor').value;
+  lastRenderParams.backfillOpacity = parseFloat(document.getElementById('backfillOpacity').value) || 0.5;
+  lastRenderParams.showImage = document.getElementById('showImage').checked;
+  lastRenderParams.showPattern = document.getElementById('showPattern').checked;
+
+  handleColorChange('__render_only__', '');
+}
 
 function loadDefaultImage() {
   const img = new Image();
@@ -342,21 +369,26 @@ processBtn.addEventListener('click', async () => {
 
   setColorChangeCallback(handleColorChange);
 
-  renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, currentZoomLevel, downloadImgBtn, downloadCsvBtn, userColorOverrides, originalColorMap });
+  renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, currentZoomLevel, downloadImgBtn, downloadCsvBtn, userColorOverrides, originalColorMap, originalColorByPattern });
 });
 
 function handleColorChange(key, newColor) {
   if (!lastProcessedTriangles || !lastRenderParams || !outputCanvas) return;
 
-  // Extract patternKey from combKey (e.g., "Pattern 1_#FF0000" -> "Pattern 1")
-  const patternKey = key.includes('_') ? key.split('_')[0] : key;
-  const color = newColor.toUpperCase();
-  
-  // Store override by patternKey
-  if (color === originalColorByPattern[patternKey]) {
-    delete userColorOverrides[patternKey];
+  // Special key for render-only (no color change, just re-render with current overrides)
+  if (key === '__render_only__') {
+    // Just re-render with current userColorOverrides
   } else {
-    userColorOverrides[patternKey] = color;
+    // Extract patternKey from combKey (e.g., "Pattern 1_#FF0000" -> "Pattern 1")
+    const patternKey = key.includes('_') ? key.split('_')[0] : key;
+    const color = newColor.toUpperCase();
+    
+    // Store override by patternKey
+    if (color === originalColorByPattern[patternKey]) {
+      delete userColorOverrides[patternKey];
+    } else {
+      userColorOverrides[patternKey] = color;
+    }
   }
 
   const octx = outputCanvas.getContext('2d');
