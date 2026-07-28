@@ -33,8 +33,21 @@ function syncPatternThicknessPlaceholder() {
   }
 }
 if (mitsukeInput) {
-  mitsukeInput.addEventListener('input', syncPatternThicknessPlaceholder);
+  mitsukeInput.addEventListener('input', () => {
+    syncPatternThicknessPlaceholder();
+    if (sourceImg) processBtn.click();
+  });
   syncPatternThicknessPlaceholder();
+}
+
+const autoTriggerIds = ['sizeA', 'sizeB', 'pitch', 'frameWidth', 'patternThickness', 'backfillOpacity', 'numInsertColors'];
+for (const id of autoTriggerIds) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('input', () => {
+      if (sourceImg) processBtn.click();
+    });
+  }
 }
 
 function setupColorSync(colorId, hexId) {
