@@ -374,10 +374,11 @@ function drawMotif(ctx, w, h, fg, index, isInverted) {
     ctx.rotate(Math.PI);
     ctx.translate(-w / 2, -h / 2);
   }
+  const scale = h / pat.w;
   ctx.translate(w / 2, h / 2);
-  ctx.rotate(Math.PI / 2);
-  ctx.translate(-w / 2, -h / 2);
-  ctx.scale(w / pat.w, h / pat.h);
+  ctx.rotate(-Math.PI / 2);
+  ctx.translate(-pat.w / 2, -pat.h / 2);
+  ctx.scale(scale, scale);
   ctx.strokeStyle = fg;
   ctx.lineWidth = 1.5;
   ctx.lineCap = "round";
@@ -412,9 +413,6 @@ export function buildPatternSvg(index, w, h, fgColor, bgColor, isInverted) {
   let pathsSvg = '';
   pat.paths.forEach(d => {
     const transforms = [];
-    transforms.push(`translate(${w / 2} ${h / 2})`);
-    transforms.push(`rotate(90)`);
-    transforms.push(`translate(${-w / 2} ${-h / 2})`);
     if (isInverted) {
       transforms.push(`translate(${w / 2} ${h / 2}) rotate(180) translate(${-w / 2} ${-h / 2})`);
     }
