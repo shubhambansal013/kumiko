@@ -119,6 +119,58 @@ describe('patterns: buildPatternSvg', () => {
   });
 });
 
+// ── buildPatternSvg centering ───────────────────────────────────────
+
+describe('patterns: buildPatternSvg centering', () => {
+  function parseScale(svg) {
+    const m = svg.match(/scale\(([\d.e+-]+) ([\d.e+-]+)\)/);
+    return m ? [parseFloat(m[1]), parseFloat(m[2])] : null;
+  }
+
+  function parseViewBox(svg) {
+    const m = svg.match(/viewBox="0 0 ([\d.e+-]+) ([\d.e+-]+)"/);
+    return m ? [parseFloat(m[1]), parseFloat(m[2])] : null;
+  }
+
+  it('scaled pattern fits exactly within viewBox for square tiles', () => {
+    for (let i = 1; i <= NUM_PATTERNS; i++) {
+      const svg = buildPatternSvg(i, 90, 90, '#000', '#fff', false);
+      const [sx, sy] = parseScale(svg);
+      const [vw, vh] = parseViewBox(svg);
+      const pat = REAL_PATTERNS[i - 1];
+      // scaled content extents
+      const maxX = pat.w * sx;
+      const maxY = pat.h * sy;
+      expect(maxX).toBeLessThanOrEqual(vw + 0.1);
+      expect(maxY).toBeLessThanOrEqual(vh + 0.1);
+      // content should fill viewBox (not be shifted or undersized)
+      expect(maxX).toBeGreaterThanOrEqual(vw - 0.1);
+      expect(maxY).toBeGreaterThanOrEqual(vh - 0.1);
+    }
+  });
+
+  it('scaled pattern fits within viewBox for non-square tiles', () => {
+    const sizes = [[50, 43.3], [100, 80], [30, 30]];
+    for (const [w, h] of sizes) {
+      for (let i = 1; i <= NUM_PATTERNS; i++) {
+        const svg = buildPatternSvg(i, w, h, '#000', '#fff', false);
+        const [sx, sy] = parseScale(svg);
+        const [vw, vh] = parseViewBox(svg);
+        const pat = REAL_PATTERNS[i - 1];
+        expect(pat.w * sx).toBeLessThanOrEqual(vw + 0.1);
+        expect(pat.h * sy).toBeLessThanOrEqual(vh + 0.1);
+      }
+    }
+  });
+
+  it('no extra translate in non-inverted SVG (content anchored at origin)', () => {
+    const svg = buildPatternSvg(1, 90, 90, '#000', '#fff', false);
+    // non-inverted should only have scale, no translate for centering
+    expect(svg).not.toMatch(/translate\(/);
+    expect(svg).toContain('scale(');
+  });
+});
+
 // ── paintPatternTile ────────────────────────────────────────────────
 
 describe('patterns: paintPatternTile', () => {
