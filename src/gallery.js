@@ -13,8 +13,6 @@ export function renderGallery() {
     const svg = buildPatternSvg(i, 90, 90, '#e8ddc9', '#241f19', false);
     const img = document.createElement('img');
     img.src = 'data:image/svg+xml,' + encodeURIComponent(svg);
-    img.style.width = '90px';
-    img.style.height = '90px';
     tile.appendChild(img);
 
     const num = document.createElement('span');
