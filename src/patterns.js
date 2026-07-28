@@ -456,7 +456,7 @@ export function computePatternDarkness(ctx, index, lineWidth) {
   return filledPixels / totalPixels;
 }
 
-export function sortPatternsByDensity(patternIndices, lineWidth = 13) {
+export function sortPatternsByDensity(patternIndices, lineWidth) {
   if (typeof document === 'undefined') return patternIndices;
   const canvas = document.createElement('canvas');
   canvas.width = 289;

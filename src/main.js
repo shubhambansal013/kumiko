@@ -153,7 +153,7 @@ processBtn.addEventListener('click', async () => {
   }
 
   const backfillColor = document.getElementById('backfillColor').value;
-  const activePatterns = sortPatternsByDensity(Array.from(selectedPatterns.values()));
+  const activePatterns = sortPatternsByDensity(Array.from(selectedPatterns.values()), patternLinePx);
 
   const gridTriangles = generateLockedGrid(
     innerWpx, innerHpx, sizeB, sizeA,
