@@ -84,7 +84,7 @@
   </fieldset>
 
   <fieldset>
-    <legend>5. Visibility & Color Options</legend>
+    <legend>5. Visibility</legend>
     <div class="checkrow">
       <input type="checkbox" id="showImage" checked>
       <label for="showImage">Show original image</label>
@@ -93,86 +93,10 @@
       <input type="checkbox" id="showPattern" checked>
       <label for="showPattern">Show Kumiko pattern</label>
     </div>
-    <div style="margin-top: 10px;">
-      <label for="mappingAlgorithm">Pattern mapping algorithm</label>
-      <select id="mappingAlgorithm">
-        <option value="clustered-darkness">Clustered Color Darkness (1 pattern per color)</option>
-        <option value="original-darkness" selected>Original Image Darkness (Multi-pattern detail)</option>
-        <option value="local-contrast">Local Contrast / Complexity</option>
-        <option value="color-hue">Color Hue (HSL)</option>
-        <option value="palette-index">Color Palette Index</option>
-      </select>
-      <div class="hint">Determines how Kumiko patterns are mapped to triangles.</div>
-    </div>
-    <div style="margin-top: 10px;">
-      <label for="maxColors">Max colors (K-means)</label>
-      <input type="number" id="maxColors" value="4" min="1" max="64">
-      <div class="hint">Reduces the variation of dynamically determined triangle colors to match the user input.</div>
-    </div>
-    <div style="margin-top: 10px;">
-      <div style="display:flex; justify-content:space-between; font-size:0.82rem;">
-        <label for="denseThreshold" style="margin:0;">Dense pattern threshold</label>
-        <span id="denseThresholdVal">50%</span>
-      </div>
-      <input type="range" id="denseThreshold" min="10" max="90" value="50" style="width:100%; cursor:pointer;">
-      <div class="hint">Lower values favor denser patterns; higher values favor lighter patterns.</div>
-    </div>
   </fieldset>
 
   <fieldset>
-    <legend>6. Empty Space & Cost Optimization</legend>
-    <div class="checkrow">
-      <input type="checkbox" id="enablePruning" checked>
-      <label for="enablePruning"><b>Optimize Empty Space</b></label>
-    </div>
-    <div class="hint" style="margin-bottom:12px;">Prevents adding patterns to empty backgrounds to reduce piece count and cost.</div>
-
-    <div style="margin-left: 10px; border-left: 2px solid var(--line); padding-left: 10px;">
-      <div class="checkrow">
-        <input type="checkbox" id="pruneVariance" checked>
-        <label for="pruneVariance">Skip solid/flat areas</label>
-      </div>
-      <div style="margin-bottom: 8px;">
-        <div style="display:flex; justify-content:space-between; font-size:0.78rem;">
-          <span>Color variance threshold</span>
-          <span id="varianceVal">8</span>
-        </div>
-        <input type="range" id="pruneVarianceThreshold" min="1" max="50" value="8" style="width:100%; cursor:pointer;">
-        <div class="hint">Higher values skip more solid background areas.</div>
-      </div>
-
-      <div class="checkrow">
-        <input type="checkbox" id="pruneWhite" checked>
-        <label for="pruneWhite">Skip light/white areas</label>
-      </div>
-      <div style="margin-bottom: 8px;">
-        <div style="display:flex; justify-content:space-between; font-size:0.78rem;">
-          <span>Brightness threshold (Max)</span>
-          <span id="whiteVal">95%</span>
-        </div>
-        <input type="range" id="pruneWhiteThreshold" min="50" max="100" value="95" style="width:100%; cursor:pointer;">
-      </div>
-
-      <div class="checkrow">
-        <input type="checkbox" id="pruneBlack">
-        <label for="pruneBlack">Skip dark/black areas</label>
-      </div>
-      <div style="margin-bottom: 8px;">
-        <div style="display:flex; justify-content:space-between; font-size:0.78rem;">
-          <span>Brightness threshold (Min)</span>
-          <span id="blackVal">5%</span>
-        </div>
-        <input type="range" id="pruneBlackThreshold" min="0" max="50" value="5" style="width:100%; cursor:pointer;">
-      </div>
-    </div>
-
-    <label style="margin-top:12px;">Cost per patterned piece ($)</label>
-    <input type="number" id="costPerPiece" value="1.50" step="0.05" min="0">
-    <div class="hint">Estimated material/labor cost per patterned triangle.</div>
-  </fieldset>
-
-  <fieldset>
-    <legend>7. Canvas Zoom</legend>
+    <legend>6. Canvas Zoom</legend>
     <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
       <button type="button" id="zoomOutBtn" style="padding:6px 12px; font-size:1rem; cursor:pointer; background:#fff; border:1px solid var(--line); border-radius:4px;">-</button>
       <input type="range" id="zoomSlider" min="100" max="400" step="10" value="100" style="flex:1; cursor:pointer;">
