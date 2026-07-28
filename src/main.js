@@ -458,6 +458,37 @@ const REAL_PATTERNS = [
   }
 ];
 
+// Normalize all pattern paths into a 100x100 SVG viewBox.
+// Outline paths (triangle border) are separated from inner decorative paths.
+const OUTLINE_PREFIX = "M.037 249.12 144.037 0l.293.212L288.075 249.48l-.33.148L0 249.48";
+
+function normalizePath(d) {
+  let first = true;
+  return d.replace(/(-?\d*\.?\d+)/g, (match, num, offset) => {
+    const n = parseFloat(num);
+    if (isNaN(n)) return match;
+    if (first) { first = false; return String(+(n * 100 / 288.075).toFixed(4)); }
+    return String(+(n * 100 / 249.628).toFixed(4));
+  });
+}
+
+const NORMALIZED_PATTERNS = REAL_PATTERNS.map(p => {
+  const inner = [];
+  let hasOutline = false;
+  p.paths.forEach(d => {
+    if (d.startsWith(OUTLINE_PREFIX)) {
+      hasOutline = true;
+      const rest = d.substring(OUTLINE_PREFIX.length).trim();
+      if (rest.length > 0) {
+        inner.push(rest.startsWith('m') || rest.startsWith('M') ? rest : "M0 100 " + rest);
+      }
+    } else {
+      inner.push(d);
+    }
+  });
+  return { inner, hasOutline };
+});
+
 const patternDarknesses = REAL_PATTERNS.map((p, idx) => {
   const canvas = document.createElement("canvas");
   canvas.width = 144;
@@ -477,104 +508,51 @@ const patternDarknesses = REAL_PATTERNS.map((p, idx) => {
 });
 patternDarknesses.sort((a, b) => a.darkness - b.darkness);
 
-function drawMotif(ctx, w, h, fg, index, isInverted, thicknessPx, isRotatedGrid, jigumiColor) {
-  const pat = REAL_PATTERNS[index];
-  if (!pat) return;
+function buildPatternSvg(index, w, h, fgColor, bgColor, isInverted, opacity, thicknessPx, jigumiColor) {
+  const np = NORMALIZED_PATTERNS[index - 1];
+  if (!np) return '';
 
-  ctx.save();
+  const rotateAttr = isInverted ? ' transform="rotate(180 50 50)"' : '';
 
-  let scaleX, scaleY;
-  if (isRotatedGrid) {
-    ctx.translate(w / 2, h / 2);
-    if (isInverted) {
-      ctx.rotate(3 * Math.PI / 2); // 270 degrees clockwise (facing left)
-    } else {
-      ctx.rotate(Math.PI / 2); // 90 degrees clockwise (facing right)
-    }
-    scaleX = h / pat.w;
-    scaleY = w / pat.h;
-    ctx.scale(scaleX, scaleY);
-    ctx.translate(-pat.w / 2, -pat.h / 2);
-
-    ctx.lineWidth = thicknessPx ? (thicknessPx / scaleX) : 1.5;
-  } else {
-    if (isInverted) {
-      ctx.translate(w / 2, h / 2);
-      ctx.rotate(Math.PI);
-      ctx.translate(-w / 2, -h / 2);
-    }
-
-    scaleX = w / pat.w;
-    scaleY = h / pat.h;
-    ctx.scale(scaleX, scaleY);
-
-    // Apply exact pattern thickness. Since context is scaled by scaleX, we divide the thicknessPx by scaleX
-    ctx.lineWidth = thicknessPx ? (thicknessPx / scaleX) : 1.5;
+  let pathsSvg = '';
+  if (np.hasOutline) {
+    pathsSvg += `<path d="M0 0 L100 0 L0 100 Z" fill="none" stroke="${jigumiColor || fgColor}" stroke-width="1"${rotateAttr}/>`;
   }
-
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-
-  const OUTLINE_PREFIX = "M.037 249.12 144.037 0l.293.212L288.075 249.48l-.33.148L0 249.48";
-
-  pat.paths.forEach(d => {
-    if (d.startsWith(OUTLINE_PREFIX)) {
-      // Draw outer grid triangle in jigumiColor
-      ctx.save();
-      ctx.strokeStyle = jigumiColor || fg;
-      ctx.stroke(new Path2D(OUTLINE_PREFIX));
-      ctx.restore();
-
-      // Only color the central part (the insert piece) with the average color from image
-      let centralPart = d.substring(OUTLINE_PREFIX.length).trim();
-      if (centralPart.length > 0) {
-        if (centralPart.startsWith('m') || centralPart.startsWith('M')) {
-          // It already starts with path command
-        } else {
-          centralPart = "M0 249.48 " + centralPart;
-        }
-        ctx.save();
-        ctx.strokeStyle = fg;
-        ctx.stroke(new Path2D(centralPart));
-        ctx.restore();
-      }
-    } else {
-      ctx.save();
-      ctx.strokeStyle = fg;
-      ctx.stroke(new Path2D(d));
-      ctx.restore();
-    }
+  np.inner.forEach(d => {
+    pathsSvg += `<path d="${normalizePath(d)}" fill="none" stroke="${fgColor}" stroke-width="1"${rotateAttr}/>`;
   });
 
-  ctx.restore();
+  let hexToRgba = (hex, alpha) => {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.substring(0, 2), 16);
+    const g = parseInt(h.substring(2, 4), 16);
+    const b = parseInt(h.substring(4, 6), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  };
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${w}" height="${h}">`
+    + `<rect width="100" height="100" fill="${hexToRgba(bgColor, opacity)}"/>`
+    + pathsSvg
+    + `</svg>`;
 }
 
 function paintPatternTile(ctx, index, x0, y0, w, h, fgColor, bgColor, isInverted, opacity, thicknessPx, isRotatedGrid, jigumiColor) {
-  ctx.save();
-  ctx.translate(x0, y0);
-
-  // Convert hex background color to RGBA using specified opacity
-  let r = 10, g = 9, b = 8; // Default #0a0908
-  if (bgColor.startsWith('#')) {
-    const hex = bgColor.slice(1);
-    if (hex.length === 6) {
-      r = parseInt(hex.slice(0, 2), 16);
-      g = parseInt(hex.slice(2, 4), 16);
-      b = parseInt(hex.slice(4, 6), 16);
-    } else if (hex.length === 3) {
-      r = parseInt(hex[0] + hex[0], 16);
-      g = parseInt(hex[1] + hex[1], 16);
-      b = parseInt(hex[2] + hex[2], 16);
-    }
-  }
-  ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
-  ctx.fillRect(0, 0, w, h);
-
-  ctx.beginPath();
-  ctx.rect(0, 0, w, h);
-  ctx.clip();
-  drawMotif(ctx, w, h, fgColor, index - 1, isInverted, thicknessPx, isRotatedGrid, jigumiColor || fgColor);
-  ctx.restore();
+  return new Promise((resolve) => {
+    const svg = buildPatternSvg(index, w, h, fgColor, bgColor, isInverted, opacity, thicknessPx, jigumiColor);
+    const blob = new Blob([svg], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, x0, y0, w, h);
+      URL.revokeObjectURL(url);
+      resolve();
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve();
+    };
+    img.src = url;
+  });
 }
 
 function renderGallery(){
@@ -795,43 +773,81 @@ function performKMeans(colors, k) {
   return centroids;
 }
 
-// Build the real equilateral-triangle asanoha-style lattice (rotated 90 degrees)
-function buildTriangles(innerW, innerH, pitch, flipHalf){
-  const colH = pitch * Math.sqrt(3)/2;
-  const cols = Math.ceil(innerW/colH) + 2;
-  const rRange = Math.ceil(innerH/pitch) + 3;
-
-  // generate point columns
-  const pointCols = [];
-  for(let c=0; c<=cols; c++){
-    const parity = (c + (flipHalf?1:0)) % 2;
-    const offset = parity * (pitch/2);
-    const colPts = [];
-    for(let r=-2; r<=rRange; r++){
-      colPts.push({x: c*colH, y: r*pitch + offset});
-    }
-    pointCols.push(colPts);
-  }
+// Generate a locked equilateral-triangle grid that fits exactly into the bounding box.
+// W = (2 * panelWidth) / (numCols + 1), H = panelHeight / numRows.
+// activePatterns may contain pattern indices (1-based) or null for empty triangles.
+// getLightnessAt(cx, cy) returns 0..1 brightness used to pick the pattern.
+function generateLockedGrid(panelWidth, panelHeight, numCols, numRows, activePatterns, getLightnessAt) {
+  const W = (2 * panelWidth) / (numCols + 1);
+  const H = panelHeight / numRows;
+  const colH = W / 2;
 
   const triangles = [];
-  for(let c=0; c<cols; c++){
-    const left = pointCols[c];
-    const right = pointCols[c+1];
-    const parityLeft = (c + (flipHalf?1:0)) % 2;
-    for(let i=0; i<left.length-1; i++){
-      const rIdx = parityLeft === 0 ? i : i+1;
-      if(rIdx < 0 || rIdx >= right.length) continue;
-      const rightPt = right[rIdx];
-      const triLeft = [left[i], left[i+1], rightPt];
-      triangles.push(triLeft);
-      const rIdx2 = rIdx + 1;
-      if(rIdx2 < right.length && i+1 < left.length){
-        const triRight = [left[i+1], rightPt, right[rIdx2]];
-        triangles.push(triRight);
-      }
+
+  for (let col = 0; col < numCols; col++) {
+    const x0 = col * colH;
+    const parity = col % 2;
+
+    for (let row = 0; row < numRows; row++) {
+      const yBase = row * H;
+      const offsetY = parity * (H / 2);
+
+      // Upward-pointing triangle (flat base at bottom)
+      const ax = x0;
+      const ay = yBase + offsetY;
+      const bx = x0 + colH;
+      const by = yBase + offsetY + H / 2;
+      const cx = x0;
+      const cy = yBase + offsetY + H;
+
+      const centerUpX = (ax + bx + cx) / 3;
+      const centerUpY = (ay + by + cy) / 3;
+
+      const lightnessUp = getLightnessAt(centerUpX, centerUpY);
+      const patternUp = assignPattern(lightnessUp, activePatterns);
+
+      triangles.push({
+        vertices: [{x: ax, y: ay}, {x: bx, y: by}, {x: cx, y: cy}],
+        center: {x: centerUpX, y: centerUpY},
+        col, row,
+        isInverted: false,
+        lightness: lightnessUp,
+        pattern: patternUp,
+      });
+
+      // Downward-pointing triangle (flat base at top)
+      const dx = x0 + colH;
+      const dy = yBase + offsetY;
+      const ex = x0;
+      const ey = yBase + offsetY + H / 2;
+      const fx = x0 + colH;
+      const fy = yBase + offsetY + H;
+
+      const centerDownX = (dx + ex + fx) / 3;
+      const centerDownY = (dy + ey + fy) / 3;
+
+      const lightnessDown = getLightnessAt(centerDownX, centerDownY);
+      const patternDown = assignPattern(lightnessDown, activePatterns);
+
+      triangles.push({
+        vertices: [{x: dx, y: dy}, {x: ex, y: ey}, {x: fx, y: fy}],
+        center: {x: centerDownX, y: centerDownY},
+        col, row,
+        isInverted: true,
+        lightness: lightnessDown,
+        pattern: patternDown,
+      });
     }
   }
+
   return triangles;
+}
+
+function assignPattern(lightness, activePatterns) {
+  if (!activePatterns || activePatterns.length === 0) return null;
+  const bucketSize = 1 / activePatterns.length;
+  const bucketIdx = Math.min(activePatterns.length - 1, Math.floor(lightness / bucketSize));
+  return activePatterns[bucketIdx] ?? null;
 }
 
 processBtn.addEventListener('click', () => {
@@ -903,28 +919,37 @@ processBtn.addEventListener('click', () => {
     octx.fillRect(frameWidthPx, frameWidthPx, innerWpx, innerHpx);
   }
 
-  const rawTriangles = buildTriangles(innerWpx, innerHpx, pitchPx, flipHalf);
   const backfillColor = document.getElementById('backfillColor').value;
   const patternList = Array.from(selectedPatterns.values());
 
-  console.log("Step 1 pre-processing starting... rawTriangles count:", rawTriangles.length);
-  // Step 1: Pre-process raw triangles to collect averages for K-means clustering and determine patterning status
-  const processedTriangles = [];
-  rawTriangles.forEach(tri => {
-    const clipped = clipPolygonToRect(tri, innerWpx, innerHpx);
-    if (clipped.length < 3) return;
+  // Build locked grid that fits exactly into the inner panel
+  const activePatterns = patternList.map(n => n); // pass pattern numbers, nulls allowed from UI
+  const gridTriangles = generateLockedGrid(
+    innerWpx, innerHpx, sizeB, sizeA,
+    activePatterns,
+    (cx, cy) => {
+      const sx = (cx + frameWidthPx) * (W_sample / W);
+      const sy = (cy + frameWidthPx) * (W_sample / W);
+      const px = Math.min(W_sample - 1, Math.max(0, Math.round(sx)));
+      const py = Math.min(H_sample - 1, Math.max(0, Math.round(sy)));
+      const idx = (py * W_sample + px) * 4;
+      return (imgData[idx] + imgData[idx + 1] + imgData[idx + 2]) / (3 * 255);
+    }
+  );
 
-    // Scale coordinates to sampling space
-    const scaleToSample = W_sample / W;
-    const sampleClipped = clipped.map(p => ({
-      x: (p.x + frameWidthPx) * scaleToSample,
-      y: (p.y + frameWidthPx) * scaleToSample
+  console.log("Grid generated:", gridTriangles.length, "triangles");
+
+  // Step 1: Sample image color for each triangle
+  const processedTriangles = [];
+  gridTriangles.forEach(t => {
+    const sx = (t.center.x + frameWidthPx) * (W_sample / W);
+    const sy = (t.center.y + frameWidthPx) * (W_sample / W);
+    const sampleClipped = t.vertices.map(p => ({
+      x: (p.x + frameWidthPx) * (W_sample / W),
+      y: (p.y + frameWidthPx) * (W_sample / W)
     }));
 
-    const avg = polygonBoundsAndAvgColor(
-      sampleClipped,
-      imgData, W_sample, H_sample
-    );
+    const avg = polygonBoundsAndAvgColor(sampleClipped, imgData, W_sample, H_sample);
     if (!avg) return;
 
     const grayscale = (avg.r + avg.g + avg.b) / 3;
@@ -942,24 +967,22 @@ processBtn.addEventListener('click', () => {
         isPruned = true;
       }
     }
-    const isPatterned = !isPruned && (patternList.length > 0);
 
     processedTriangles.push({
-      tri,
-      clipped,
+      t,
       avg,
       originalAvg: { r: avg.r, g: avg.g, b: avg.b, stdDev: avg.stdDev },
-      isPatterned
+      isPatterned: !isPruned && t.pattern !== null,
     });
   });
 
   console.log("Step 1 done. processedTriangles count:", processedTriangles.length);
-  // Step 2: Perform K-means color clustering only on patterned (non-pruned) triangles
+
+  // Step 2: K-means color clustering on patterned triangles
   const maxColorsInput = parseInt(document.getElementById('maxColors').value) || 4;
   const patternedColors = processedTriangles.filter(pt => pt.isPatterned).map(pt => pt.avg);
   const centroids = performKMeans(patternedColors, maxColorsInput);
 
-  // Map each patterned triangle's avg color to the closest centroid
   processedTriangles.forEach((pt) => {
     if (pt.isPatterned && centroids.length > 0) {
       let bestIdx = 0;
@@ -978,7 +1001,7 @@ processBtn.addEventListener('click', () => {
       pt.avg.b = bestCentroid.b;
       pt.clusterIndex = bestIdx;
     } else {
-      pt.clusterIndex = -1; // Not clustered (flat/none)
+      pt.clusterIndex = -1;
     }
   });
 
@@ -991,72 +1014,51 @@ processBtn.addEventListener('click', () => {
   octx.save();
   octx.translate(frameWidthPx, frameWidthPx);
 
-  processedTriangles.forEach(({ tri, clipped, avg, isPatterned }) => {
-    // Use dynamic average color (which is now K-means clustered if patterned)
+  processedTriangles.forEach(({ t, avg, isPatterned }) => {
     const hexColor = rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b));
-
-    // bounding box of this triangle, for the pattern tile
-    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
-    clipped.forEach(p=>{ minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x); minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y); });
+    const v = t.vertices;
 
     octx.save();
     octx.beginPath();
-    octx.moveTo(clipped[0].x, clipped[0].y);
-    for(let k=1;k<clipped.length;k++) octx.lineTo(clipped[k].x, clipped[k].y);
+    octx.moveTo(v[0].x, v[0].y);
+    octx.lineTo(v[1].x, v[1].y);
+    octx.lineTo(v[2].x, v[2].y);
     octx.closePath();
     octx.clip();
 
-    const grayscale = (avg.r + avg.g + avg.b) / 3;
-    const avgDarkness = (255 - grayscale) / 255;
-    const activePatterns = patternDarknesses.filter(p => patternList.includes(p.index + 1));
-    const isInverted = Math.abs(tri[0].x - tri[1].x) < 0.001;
+    const pNum = t.pattern != null ? (t.pattern + 1) : 0;
 
-    let pNum = 0;
-    if (isPatterned && activePatterns.length > 0) {
-      const denseThresholdVal = (parseFloat(document.getElementById('denseThreshold')?.value || 50)) / 100;
-      let adjustedDarkness = avgDarkness;
-      if (denseThresholdVal > 0) {
-        adjustedDarkness = Math.min(1, Math.max(0, avgDarkness * (0.5 / denseThresholdVal)));
-      }
-      const bucketSize = 1 / activePatterns.length;
-      const bucketIdx = Math.min(activePatterns.length - 1, Math.floor(adjustedDarkness / bucketSize));
-      pNum = activePatterns[bucketIdx].index + 1;
-    }
-
-    if(showPattern && pNum > 0){
+    if (showPattern && pNum > 0) {
       const customThicknessVal = parseFloat(document.getElementById('patternThickness').value);
       const chosenThickness = isNaN(customThicknessVal) ? mitsuke : customThicknessVal;
       const thicknessPx = chosenThickness * pxPerMM;
       const opacityVal = parseFloat(document.getElementById('backfillOpacity').value);
       const opacity = isNaN(opacityVal) ? 0.5 : opacityVal;
 
-      paintPatternTile(octx, pNum, minX, minY, Math.max(1,maxX-minX), Math.max(1,maxY-minY), hexColor, backfillColor, isInverted, opacity, thicknessPx, true, jigumiColor);
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      v.forEach(p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); });
+
+      paintPatternTile(octx, pNum, minX, minY, Math.max(1, maxX - minX), Math.max(1, maxY - minY), hexColor, backfillColor, t.isInverted, opacity, thicknessPx, true, jigumiColor);
       totalPatterned++;
     } else {
       totalFlat++;
-      // No colored fill for flat/none triangles! They reflect the background.
     }
     octx.restore();
 
-    // track pieces count grouped by pattern and hex color
     const patternKey = pNum > 0 ? "Pattern " + pNum : "Flat/None";
     const colorKey = pNum > 0 ? hexColor.toUpperCase() : "N/A";
     const combKey = pNum > 0 ? (patternKey + "_" + colorKey) : "Flat/None";
 
     if (!counts[combKey]) {
-      counts[combKey] = {
-        pattern: patternKey,
-        color: colorKey,
-        count: 0
-      };
+      counts[combKey] = { pattern: patternKey, color: colorKey, count: 0 };
     }
     counts[combKey].count++;
     totalPieces++;
 
-    // mitsuke (grid line) stroke on the actual triangle edge
     octx.beginPath();
-    octx.moveTo(clipped[0].x, clipped[0].y);
-    for(let k=1;k<clipped.length;k++) octx.lineTo(clipped[k].x, clipped[k].y);
+    octx.moveTo(v[0].x, v[0].y);
+    octx.lineTo(v[1].x, v[1].y);
+    octx.lineTo(v[2].x, v[2].y);
     octx.closePath();
     octx.lineWidth = mitsukePx;
     octx.strokeStyle = jigumiColor;
