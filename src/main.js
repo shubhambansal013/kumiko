@@ -6,6 +6,7 @@ import { generateLockedGrid } from './grid.js';
 import { paintPatternTile, sortPatternsByDensity } from './patterns.js';
 import { selectedPatterns, renderGallery, setupGalleryButtons } from './gallery.js';
 import { drawPreview, applyZoomStyle, renderOutput } from './renderer.js';
+import { getImageCrop } from './image-fit.js';
 
 const fileInput = document.getElementById('fileInput');
 const processBtn = document.getElementById('processBtn');
@@ -34,29 +35,6 @@ function syncPatternThicknessPlaceholder() {
 if (mitsukeInput) {
   mitsukeInput.addEventListener('input', syncPatternThicknessPlaceholder);
   syncPatternThicknessPlaceholder();
-}
-
-function getImageCrop(imgW, imgH, panelW, panelH, fitMode) {
-  const imgAspect = imgW / imgH;
-  const panelAspect = panelW / panelH;
-  switch (fitMode) {
-    case 'cover':
-      if (imgAspect > panelAspect) {
-        const cropW = imgH * panelAspect;
-        return { sx: (imgW - cropW) / 2, sy: 0, sw: cropW, sh: imgH, dx: 0, dy: 0, dw: panelW, dh: panelH };
-      } else {
-        const cropH = imgW / panelAspect;
-        return { sx: 0, sy: (imgH - cropH) / 2, sw: imgW, sh: cropH, dx: 0, dy: 0, dw: panelW, dh: panelH };
-      }
-    case 'contain': {
-      const scale = Math.min(panelW / imgW, panelH / imgH);
-      const drawW = imgW * scale;
-      const drawH = imgH * scale;
-      return { sx: 0, sy: 0, sw: imgW, sh: imgH, dx: (panelW - drawW) / 2, dy: (panelH - drawH) / 2, dw: drawW, dh: drawH };
-    }
-    default:
-      return { sx: 0, sy: 0, sw: imgW, sh: imgH, dx: 0, dy: 0, dw: panelW, dh: panelH };
-  }
 }
 
 function setupColorSync(colorId, hexId) {
@@ -141,6 +119,12 @@ processBtn.addEventListener('click', async () => {
   const pxPerMM_sample = W_sample / panelWidthMM;
   const H_sample = Math.round(panelHeightMM * pxPerMM_sample);
 
+  const frameWidthPx = frameWidthMM * pxPerMM;
+  const mitsukePx = Math.max(0.5, mitsuke * pxPerMM);
+  const patternLinePx = mitsukePx * 0.8;
+  const innerWpx = innerWidthMM * pxPerMM;
+  const innerHpx = innerHeightMM * pxPerMM;
+
   const srcCanvas = document.createElement('canvas');
   srcCanvas.width = W_sample; srcCanvas.height = H_sample;
   const sctx = srcCanvas.getContext('2d');
@@ -151,12 +135,6 @@ processBtn.addEventListener('click', async () => {
   sctx.fillRect(0, 0, W_sample, H_sample);
   sctx.drawImage(sourceImg, r.sx, r.sy, r.sw, r.sh, (frameWidthPx + r.dx) * s, (frameWidthPx + r.dy) * s, r.dw * s, r.dh * s);
   const imgData = sctx.getImageData(0, 0, W_sample, H_sample).data;
-
-  const frameWidthPx = frameWidthMM * pxPerMM;
-  const mitsukePx = Math.max(0.5, mitsuke * pxPerMM);
-  const patternLinePx = mitsukePx * 0.8;
-  const innerWpx = innerWidthMM * pxPerMM;
-  const innerHpx = innerHeightMM * pxPerMM;
 
   outputCanvas = document.createElement('canvas');
   outputCanvas.width = W; outputCanvas.height = H;
