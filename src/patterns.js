@@ -466,6 +466,6 @@ export function sortPatternsByDensity(patternIndices, lineWidth) {
     index: i,
     darkness: computePatternDarkness(ctx, i, lineWidth),
   }));
-  scored.sort((a, b) => a.darkness - b.darkness);
+  scored.sort((a, b) => a.darkness - b.darkness || a.index - b.index);
   return scored.map(p => p.index);
 }
