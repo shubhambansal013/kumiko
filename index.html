@@ -216,6 +216,14 @@
       <input type="number" id="maxColors" value="4" min="1" max="64">
       <div class="hint">Reduces the variation of dynamically determined triangle colors to match the user input.</div>
     </div>
+    <div style="margin-top: 10px;">
+      <div style="display:flex; justify-content:space-between; font-size:0.82rem;">
+        <label for="denseThreshold" style="margin:0;">Dense pattern threshold</label>
+        <span id="denseThresholdVal">50%</span>
+      </div>
+      <input type="range" id="denseThreshold" min="10" max="90" value="50" style="width:100%; cursor:pointer;">
+      <div class="hint">Lower values favor denser patterns; higher values favor lighter patterns.</div>
+    </div>
   </fieldset>
 
   <fieldset>
@@ -449,7 +457,9 @@ const REAL_PATTERNS = [
   {
     "w": 288.075,
     "h": 249.628,
-    "paths": []
+    "paths": [
+      "M.037 249.12 144.037 0l.293.212L288.075 249.48l-.33.148L0 249.48m78.472-45.355 65.565-113.489m.043 0 65.501 113.526m-.021.037-131.067-.037M91.666 90.603l104.828.067m39.302 68.153-52.472 90.751m-78.674-.04-52.356-90.818M99.99 76.203l88.2.067m55.915 96.962-44.159 76.35m-111.928-.057-44.043-76.418"
+    ]
   },
   {
     "w": 288.359,
@@ -771,12 +781,13 @@ const patternDarknesses = REAL_PATTERNS.map((p, idx) => {
 });
 patternDarknesses.sort((a, b) => a.darkness - b.darkness);
 
-function drawMotif(ctx, w, h, fg, index, isInverted, thicknessPx, isRotatedGrid) {
+function drawMotif(ctx, w, h, fg, index, isInverted, thicknessPx, isRotatedGrid, jigumiColor) {
   const pat = REAL_PATTERNS[index];
   if (!pat) return;
 
   ctx.save();
 
+  let scaleX, scaleY;
   if (isRotatedGrid) {
     ctx.translate(w / 2, h / 2);
     if (isInverted) {
@@ -784,12 +795,11 @@ function drawMotif(ctx, w, h, fg, index, isInverted, thicknessPx, isRotatedGrid)
     } else {
       ctx.rotate(Math.PI / 2); // 90 degrees clockwise (facing right)
     }
-    const scaleX = h / pat.w;
-    const scaleY = w / pat.h;
+    scaleX = h / pat.w;
+    scaleY = w / pat.h;
     ctx.scale(scaleX, scaleY);
     ctx.translate(-pat.w / 2, -pat.h / 2);
 
-    ctx.strokeStyle = fg;
     ctx.lineWidth = thicknessPx ? (thicknessPx / scaleX) : 1.5;
   } else {
     if (isInverted) {
@@ -798,25 +808,52 @@ function drawMotif(ctx, w, h, fg, index, isInverted, thicknessPx, isRotatedGrid)
       ctx.translate(-w / 2, -h / 2);
     }
 
-    const scaleX = w / pat.w;
-    const scaleY = h / pat.h;
+    scaleX = w / pat.w;
+    scaleY = h / pat.h;
     ctx.scale(scaleX, scaleY);
 
-    ctx.strokeStyle = fg;
     // Apply exact pattern thickness. Since context is scaled by scaleX, we divide the thicknessPx by scaleX
     ctx.lineWidth = thicknessPx ? (thicknessPx / scaleX) : 1.5;
   }
 
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
+
+  const OUTLINE_PREFIX = "M.037 249.12 144.037 0l.293.212L288.075 249.48l-.33.148L0 249.48";
+
   pat.paths.forEach(d => {
-    ctx.stroke(new Path2D(d));
+    if (d.startsWith(OUTLINE_PREFIX)) {
+      // Draw outer grid triangle in jigumiColor
+      ctx.save();
+      ctx.strokeStyle = jigumiColor || fg;
+      ctx.stroke(new Path2D(OUTLINE_PREFIX));
+      ctx.restore();
+
+      // Only color the central part (the insert piece) with the average color from image
+      let centralPart = d.substring(OUTLINE_PREFIX.length).trim();
+      if (centralPart.length > 0) {
+        if (centralPart.startsWith('m') || centralPart.startsWith('M')) {
+          // It already starts with path command
+        } else {
+          centralPart = "M0 249.48 " + centralPart;
+        }
+        ctx.save();
+        ctx.strokeStyle = fg;
+        ctx.stroke(new Path2D(centralPart));
+        ctx.restore();
+      }
+    } else {
+      ctx.save();
+      ctx.strokeStyle = fg;
+      ctx.stroke(new Path2D(d));
+      ctx.restore();
+    }
   });
 
   ctx.restore();
 }
 
-function paintPatternTile(ctx, index, x0, y0, w, h, fgColor, bgColor, isInverted, opacity, thicknessPx, isRotatedGrid) {
+function paintPatternTile(ctx, index, x0, y0, w, h, fgColor, bgColor, isInverted, opacity, thicknessPx, isRotatedGrid, jigumiColor) {
   ctx.save();
   ctx.translate(x0, y0);
 
@@ -840,7 +877,7 @@ function paintPatternTile(ctx, index, x0, y0, w, h, fgColor, bgColor, isInverted
   ctx.beginPath();
   ctx.rect(0, 0, w, h);
   ctx.clip();
-  drawMotif(ctx, w, h, fgColor, index - 1, isInverted, thicknessPx, isRotatedGrid);
+  drawMotif(ctx, w, h, fgColor, index - 1, isInverted, thicknessPx, isRotatedGrid, jigumiColor || fgColor);
   ctx.restore();
 }
 
@@ -1175,7 +1212,7 @@ processBtn.addEventListener('click', () => {
   const patternList = Array.from(selectedPatterns.values());
 
   console.log("Step 1 pre-processing starting... rawTriangles count:", rawTriangles.length);
-  // Step 1: Pre-process raw triangles to collect averages for K-means clustering
+  // Step 1: Pre-process raw triangles to collect averages for K-means clustering and determine patterning status
   const processedTriangles = [];
   rawTriangles.forEach(tri => {
     const clipped = clipPolygonToRect(tri, innerWpx, innerHpx);
@@ -1193,18 +1230,43 @@ processBtn.addEventListener('click', () => {
       imgData, W_sample, H_sample
     );
     if (!avg) return;
-    processedTriangles.push({ tri, clipped, avg, originalAvg: { r: avg.r, g: avg.g, b: avg.b, stdDev: avg.stdDev } });
+
+    const grayscale = (avg.r + avg.g + avg.b) / 3;
+    const brightnessPercent = (grayscale / 255) * 100;
+
+    let isPruned = false;
+    if (document.getElementById('enablePruning').checked) {
+      if (document.getElementById('pruneVariance').checked && avg.stdDev < parseFloat(document.getElementById('pruneVarianceThreshold').value)) {
+        isPruned = true;
+      }
+      if (document.getElementById('pruneWhite').checked && brightnessPercent > parseFloat(document.getElementById('pruneWhiteThreshold').value)) {
+        isPruned = true;
+      }
+      if (document.getElementById('pruneBlack').checked && brightnessPercent < parseFloat(document.getElementById('pruneBlackThreshold').value)) {
+        isPruned = true;
+      }
+    }
+    const isPatterned = !isPruned && (patternList.length > 0);
+
+    processedTriangles.push({
+      tri,
+      clipped,
+      avg,
+      originalAvg: { r: avg.r, g: avg.g, b: avg.b, stdDev: avg.stdDev },
+      isPatterned
+    });
   });
 
   console.log("Step 1 done. processedTriangles count:", processedTriangles.length);
-  // Step 2: Perform K-means color clustering if K is specified
+  // Step 2: Perform K-means color clustering only on patterned (non-pruned) triangles
   const maxColorsInput = parseInt(document.getElementById('maxColors').value) || 4;
-  const centroids = performKMeans(processedTriangles.map(pt => pt.avg), maxColorsInput);
+  const patternedColors = processedTriangles.filter(pt => pt.isPatterned).map(pt => pt.avg);
+  const centroids = performKMeans(patternedColors, maxColorsInput);
 
-  // Map each triangle's avg color to the closest centroid
-  processedTriangles.forEach((pt, triIdx) => {
-    let bestIdx = 0;
-    if (centroids.length > 0) {
+  // Map each patterned triangle's avg color to the closest centroid
+  processedTriangles.forEach((pt) => {
+    if (pt.isPatterned && centroids.length > 0) {
+      let bestIdx = 0;
       let bestCentroid = centroids[0];
       let minDist = Infinity;
       centroids.forEach((cent, centIdx) => {
@@ -1218,8 +1280,10 @@ processBtn.addEventListener('click', () => {
       pt.avg.r = bestCentroid.r;
       pt.avg.g = bestCentroid.g;
       pt.avg.b = bestCentroid.b;
+      pt.clusterIndex = bestIdx;
+    } else {
+      pt.clusterIndex = -1; // Not clustered (flat/none)
     }
-    pt.clusterIndex = bestIdx;
   });
 
   console.log("Step 2 done. Centroids count:", centroids.length);
@@ -1231,8 +1295,8 @@ processBtn.addEventListener('click', () => {
   octx.save();
   octx.translate(frameWidthPx, frameWidthPx);
 
-  processedTriangles.forEach(({ tri, clipped, avg }) => {
-    // Use dynamic average color (which is now K-means clustered)
+  processedTriangles.forEach(({ tri, clipped, avg, isPatterned }) => {
+    // Use dynamic average color (which is now K-means clustered if patterned)
     const hexColor = rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b));
 
     // bounding box of this triangle, for the pattern tile
@@ -1248,33 +1312,19 @@ processBtn.addEventListener('click', () => {
 
     const grayscale = (avg.r + avg.g + avg.b) / 3;
     const avgDarkness = (255 - grayscale) / 255;
-    const brightnessPercent = (grayscale / 255) * 100;
     const activePatterns = patternDarknesses.filter(p => patternList.includes(p.index + 1));
     const isInverted = Math.abs(tri[0].x - tri[1].x) < 0.001;
 
     let pNum = 0;
-    if (activePatterns.length > 0) {
+    if (isPatterned && activePatterns.length > 0) {
+      const denseThresholdVal = (parseFloat(document.getElementById('denseThreshold')?.value || 50)) / 100;
+      let adjustedDarkness = avgDarkness;
+      if (denseThresholdVal > 0) {
+        adjustedDarkness = Math.min(1, Math.max(0, avgDarkness * (0.5 / denseThresholdVal)));
+      }
       const bucketSize = 1 / activePatterns.length;
-      const bucketIdx = Math.min(activePatterns.length - 1, Math.floor(avgDarkness / bucketSize));
+      const bucketIdx = Math.min(activePatterns.length - 1, Math.floor(adjustedDarkness / bucketSize));
       pNum = activePatterns[bucketIdx].index + 1;
-    }
-
-    // Apply Cost Optimization / Empty Space Pruning
-    let isPruned = false;
-    if (document.getElementById('enablePruning').checked) {
-      if (document.getElementById('pruneVariance').checked && avg.stdDev < parseFloat(document.getElementById('pruneVarianceThreshold').value)) {
-        isPruned = true;
-      }
-      if (document.getElementById('pruneWhite').checked && brightnessPercent > parseFloat(document.getElementById('pruneWhiteThreshold').value)) {
-        isPruned = true;
-      }
-      if (document.getElementById('pruneBlack').checked && brightnessPercent < parseFloat(document.getElementById('pruneBlackThreshold').value)) {
-        isPruned = true;
-      }
-    }
-
-    if (isPruned) {
-      pNum = 0;
     }
 
     if(showPattern && pNum > 0){
@@ -1284,23 +1334,18 @@ processBtn.addEventListener('click', () => {
       const opacityVal = parseFloat(document.getElementById('backfillOpacity').value);
       const opacity = isNaN(opacityVal) ? 0.5 : opacityVal;
 
-      paintPatternTile(octx, pNum, minX, minY, Math.max(1,maxX-minX), Math.max(1,maxY-minY), hexColor, backfillColor, isInverted, opacity, thicknessPx, true);
+      paintPatternTile(octx, pNum, minX, minY, Math.max(1,maxX-minX), Math.max(1,maxY-minY), hexColor, backfillColor, isInverted, opacity, thicknessPx, true, jigumiColor);
       totalPatterned++;
     } else {
       totalFlat++;
-      if (showPattern && pNum === 0) {
-        if (!showImage) {
-          octx.fillStyle = hexColor;
-          octx.fillRect(minX, minY, maxX-minX, maxY-minY);
-        }
-      }
+      // No colored fill for flat/none triangles! They reflect the background.
     }
     octx.restore();
 
     // track pieces count grouped by pattern and hex color
-    const colorKey = hexColor.toUpperCase();
     const patternKey = pNum > 0 ? "Pattern " + pNum : "Flat/None";
-    const combKey = patternKey + "_" + colorKey;
+    const colorKey = pNum > 0 ? hexColor.toUpperCase() : "N/A";
+    const combKey = pNum > 0 ? (patternKey + "_" + colorKey) : "Flat/None";
 
     if (!counts[combKey]) {
       counts[combKey] = {
@@ -1373,7 +1418,6 @@ function renderOutput(){
 
   const costPerPieceVal = parseFloat(document.getElementById('costPerPiece').value) || 0;
   const patternedCost = (totalPatterned || 0) * costPerPieceVal;
-  const savings = (totalFlat || 0) * costPerPieceVal;
 
   let html = `<div class="section-title">Result — ${patternName}</div>`;
   html += `<div class="stats-row">
@@ -1392,11 +1436,6 @@ function renderOutput(){
         <b style="font-size: 1.15rem; color: var(--accent);">$${patternedCost.toFixed(2)}</b>
         <span style="font-size: 0.7rem; color: #8a8378;">${totalPatterned || 0} × $${costPerPieceVal.toFixed(2)}</span>
       </div>
-      <div class="stat" style="flex: 1; margin: 0;">
-        <span style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: #2e7d32;">Optimized Savings</span>
-        <b style="font-size: 1.15rem; color: #2e7d32;">$${savings.toFixed(2)}</b>
-        <span style="font-size: 0.7rem; color: #2e7d32;">Saved ${totalFlat || 0} pieces!</span>
-      </div>
     </div>`;
   }
 
@@ -1404,9 +1443,10 @@ function renderOutput(){
   Object.keys(counts).sort().forEach(key => {
     const item = counts[key];
     const pct = total > 0 ? ((item.count / total) * 100).toFixed(1) : '0.0';
+    const colorCell = item.color === "N/A" ? "" : `<span class="swatch" style="background:${item.color}"></span>${item.color}`;
     html += `<tr>
       <td>${item.pattern}</td>
-      <td><span class="swatch" style="background:${item.color}"></span>${item.color}</td>
+      <td>${colorCell}</td>
       <td>${item.count}</td>
       <td>${pct}%</td>
     </tr>`;
@@ -1529,8 +1569,18 @@ function updatePruningUI() {
   });
 }
 
+const denseThreshold = document.getElementById('denseThreshold');
+const denseThresholdVal = document.getElementById('denseThresholdVal');
+
+function updateDenseThresholdUI() {
+  if (denseThresholdVal && denseThreshold) {
+    denseThresholdVal.textContent = denseThreshold.value + '%';
+  }
+}
+
 // Initial UI sync
 updatePruningUI();
+updateDenseThresholdUI();
 
 // Event listeners to update values and re-trigger mapped triangles rendering
 [
@@ -1547,6 +1597,15 @@ updatePruningUI();
     });
   }
 });
+
+if (denseThreshold) {
+  denseThreshold.addEventListener('input', () => {
+    updateDenseThresholdUI();
+    if (sourceImg) {
+      processBtn.click();
+    }
+  });
+}
 </script>
 </body>
 </html>
