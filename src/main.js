@@ -105,7 +105,7 @@ processBtn.addEventListener('click', async () => {
 
   const patternName = "Kumiko Pattern Map";
 
-  const innerWidthMM = sizeB * pitch * 2 / Math.sqrt(3);
+  const innerWidthMM = sizeB * pitch * Math.sqrt(3) / 2;
   const innerHeightMM = sizeA * pitch;
   const panelWidthMM = innerWidthMM + frameWidthMM * 2;
   const panelHeightMM = innerHeightMM + frameWidthMM * 2;
