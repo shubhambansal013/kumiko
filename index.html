@@ -15,6 +15,12 @@
     <legend>1. Source image</legend>
     <input type="file" id="fileInput" accept="image/*">
     <div class="hint">Upload a JPEG/PNG of your art (export your SVG as an image first if needed).</div>
+    <label style="margin-top:8px;">Image fit</label>
+    <select id="imageFit" style="width:100%;">
+      <option value="cover">Crop to fill (no distortion)</option>
+      <option value="contain">Fit within (no distortion)</option>
+      <option value="stretch">Stretch to fill (distort)</option>
+    </select>
   </fieldset>
 
   <fieldset>

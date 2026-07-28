@@ -36,6 +36,29 @@ if (mitsukeInput) {
   syncPatternThicknessPlaceholder();
 }
 
+function getImageCrop(imgW, imgH, panelW, panelH, fitMode) {
+  const imgAspect = imgW / imgH;
+  const panelAspect = panelW / panelH;
+  switch (fitMode) {
+    case 'cover':
+      if (imgAspect > panelAspect) {
+        const cropW = imgH * panelAspect;
+        return { sx: (imgW - cropW) / 2, sy: 0, sw: cropW, sh: imgH, dx: 0, dy: 0, dw: panelW, dh: panelH };
+      } else {
+        const cropH = imgW / panelAspect;
+        return { sx: 0, sy: (imgH - cropH) / 2, sw: imgW, sh: cropH, dx: 0, dy: 0, dw: panelW, dh: panelH };
+      }
+    case 'contain': {
+      const scale = Math.min(panelW / imgW, panelH / imgH);
+      const drawW = imgW * scale;
+      const drawH = imgH * scale;
+      return { sx: 0, sy: 0, sw: imgW, sh: imgH, dx: (panelW - drawW) / 2, dy: (panelH - drawH) / 2, dw: drawW, dh: drawH };
+    }
+    default:
+      return { sx: 0, sy: 0, sw: imgW, sh: imgH, dx: 0, dy: 0, dw: panelW, dh: panelH };
+  }
+}
+
 function setupColorSync(colorId, hexId) {
   const colorInput = document.getElementById(colorId);
   const hexInput = document.getElementById(hexId);
@@ -121,7 +144,12 @@ processBtn.addEventListener('click', async () => {
   const srcCanvas = document.createElement('canvas');
   srcCanvas.width = W_sample; srcCanvas.height = H_sample;
   const sctx = srcCanvas.getContext('2d');
-  sctx.drawImage(sourceImg, 0, 0, W_sample, H_sample);
+  const fitMode = document.getElementById('imageFit').value;
+  const r = getImageCrop(sourceImg.naturalWidth, sourceImg.naturalHeight, innerWpx, innerHpx, fitMode);
+  const s = W_sample / W;
+  sctx.fillStyle = '#ffffff';
+  sctx.fillRect(0, 0, W_sample, H_sample);
+  sctx.drawImage(sourceImg, r.sx, r.sy, r.sw, r.sh, (frameWidthPx + r.dx) * s, (frameWidthPx + r.dy) * s, r.dw * s, r.dh * s);
   const imgData = sctx.getImageData(0, 0, W_sample, H_sample).data;
 
   const frameWidthPx = frameWidthMM * pxPerMM;
@@ -145,7 +173,7 @@ processBtn.addEventListener('click', async () => {
     octx.beginPath();
     octx.rect(frameWidthPx, frameWidthPx, innerWpx, innerHpx);
     octx.clip();
-    octx.drawImage(sourceImg, 0, 0, W, H);
+    octx.drawImage(sourceImg, r.sx, r.sy, r.sw, r.sh, frameWidthPx + r.dx, frameWidthPx + r.dy, r.dw, r.dh);
     octx.restore();
   } else {
     octx.fillStyle = "#ffffff";
@@ -324,4 +352,7 @@ document.getElementById('showPattern').addEventListener('change', () => {
   if (sourceImg) {
     processBtn.click();
   }
+});
+document.getElementById('imageFit').addEventListener('change', () => {
+  if (sourceImg) processBtn.click();
 });
