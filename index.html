@@ -781,7 +781,8 @@ patternDarknesses.sort((a, b) => a.darkness - b.darkness);
 
 function getPatternTransform(patternIndex, columnIndex, triangleIndex, isInverted) {
   const rotations = [330, 150, 90, 30, 210, 270];
-  const rotationIndex = ((triangleIndex % 6) + (isInverted ? 3 : 0)) % 6;
+  const safeTriangleIndex = ((triangleIndex % 6) + 6) % 6;
+  const rotationIndex = (safeTriangleIndex + (isInverted ? 3 : 0)) % 6;
   let rotation = rotations[rotationIndex];
   let scaleY = 1;
 
@@ -802,9 +803,11 @@ function getPatternTransform(patternIndex, columnIndex, triangleIndex, isInverte
     offset = [2, 2];
   }
 
+  const paritySum = columnIndex + triangleIndex;
+  const safeParitySum = ((paritySum % 2) + 2) % 2;
   if (
     flippedPatternIndices.includes(patternIndex) &&
-    (columnIndex + triangleIndex) % 2 == 0
+    safeParitySum == 0
   ) {
     if (rotation == 330) {
       rotation = 210;
@@ -1193,51 +1196,47 @@ function performKMeans(colors, k) {
 
 // Build the real equilateral-triangle asanoha-style lattice (rotated 90 degrees)
 function buildTriangles(innerW, innerH, pitch, flipHalf){
-  const colH = pitch * Math.sqrt(3)/2;
-  const cols = Math.ceil(innerW/colH) + 2;
-  const rRange = Math.ceil(innerH/pitch) + 3;
-
-  // generate point columns
-  const pointCols = [];
-  for(let c=0; c<=cols; c++){
-    const parity = (c + (flipHalf?1:0)) % 2;
-    const offset = parity * (pitch/2);
-    const colPts = [];
-    for(let r=-2; r<=rRange; r++){
-      colPts.push({x: c*colH, y: r*pitch + offset});
-    }
-    pointCols.push(colPts);
-  }
+  const colH = pitch * Math.sqrt(3) / 2;
+  const cols = Math.ceil(innerW / colH) + 2;
+  const rows = Math.ceil(innerH / (pitch / 2)) + 4;
 
   const triangles = [];
-  for(let c=0; c<cols; c++){
-    const left = pointCols[c];
-    const right = pointCols[c+1];
-    const parityLeft = (c + (flipHalf?1:0)) % 2;
-    let tIdx = 0;
-    for(let i=0; i<left.length-1; i++){
-      const rIdx = parityLeft === 0 ? i : i+1;
-      if(rIdx < 0 || rIdx >= right.length) continue;
-      const rightPt = right[rIdx];
-      const triLeft = [left[i], left[i+1], rightPt];
-      triangles.push({
-        tri: triLeft,
-        columnIndex: c,
-        triangleIndex: tIdx++,
-        isInverted: false
-      });
-      const rIdx2 = rIdx + 1;
-      if(rIdx2 < right.length && i+1 < left.length){
-        const triRight = [left[i+1], rightPt, right[rIdx2]];
-        triangles.push({
-          tri: triRight,
-          columnIndex: c,
-          triangleIndex: tIdx++,
-          isInverted: true
-        });
+
+  // Svelte-aligned overlapping grid of triangles
+  // We allow c (columnIndex) and r (triangleIndex) to go into negative ranges
+  // to ensure complete coverage of the inner panel edges.
+  for (let c = -2; c < cols + 2; c++) {
+    for (let r = -4; r < rows + 4; r++) {
+      const isInverted = (c + (flipHalf ? 1 : 0)) % 2 !== 0;
+
+      // Svelte-aligned triangle vertices
+      let x1 = c * colH;
+      let x2 = (c + 1) * colH;
+      if (isInverted) {
+        const temp = x1;
+        x1 = x2;
+        x2 = temp;
       }
+
+      const y1 = r * (pitch / 2);
+      const y2 = (r + 1) * (pitch / 2);
+      const y3 = (r + 2) * (pitch / 2);
+
+      const tri = [
+        { x: x1, y: y1 },
+        { x: x2, y: y2 },
+        { x: x1, y: y3 }
+      ];
+
+      triangles.push({
+        tri: tri,
+        columnIndex: c,
+        triangleIndex: r,
+        isInverted: isInverted
+      });
     }
   }
+
   return triangles;
 }
 
@@ -1463,13 +1462,11 @@ processBtn.addEventListener('click', () => {
       const colH = pitchPx * Math.sqrt(3) / 2;
       const scaleX_canvas = colH / 255;
       const scaleY_canvas = (pitchPx / 2) / 146;
-      const parity = (columnIndex + (flipHalf ? 1 : 0)) % 2;
-      const gridYOffset = -2 * pitchPx + parity * (pitchPx / 2);
 
       const { offset } = getPatternTransform(pNum - 1, columnIndex, triangleIndex, isInverted);
 
       const tx_canvas = columnIndex * colH + offset[0] * scaleX_canvas;
-      const ty_canvas = triangleIndex * (pitchPx / 2) + gridYOffset + offset[1] * scaleY_canvas;
+      const ty_canvas = triangleIndex * (pitchPx / 2) + offset[1] * scaleY_canvas;
 
       octx.translate(tx_canvas, ty_canvas);
       octx.scale(scaleX_canvas, scaleY_canvas);
