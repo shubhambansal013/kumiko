@@ -365,6 +365,44 @@ export const REAL_PATTERNS = [
   }
 ];
 
+let _patternFeatures = null;
+
+function countSvgCommands(pathStr) {
+  return (pathStr.match(/[MmLlCcQqAaSsTtHhVvZz]/g) || []).length;
+}
+
+export function getPatternFeatures() {
+  if (_patternFeatures) return _patternFeatures;
+  const W = 288, H = 250;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 1;
+
+  const raw = REAL_PATTERNS.map((p, idx) => {
+    ctx.clearRect(0, 0, W, H);
+    p.paths.forEach(d => ctx.stroke(new Path2D(d)));
+    const data = ctx.getImageData(0, 0, W, H).data;
+    let inkPixels = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] > 0) inkPixels++;
+    const density = inkPixels / (W * H);
+
+    // Detail: count of SVG drawing commands across all paths
+    let commands = 0;
+    p.paths.forEach(d => { commands += countSvgCommands(d); });
+    const detail = commands;
+
+    return { index: idx, density, detail };
+  });
+
+  const maxDensity = Math.max(...raw.map(f => f.density)) || 1;
+  const maxDetail = Math.max(...raw.map(f => f.detail)) || 1;
+  raw.forEach(f => { f.density /= maxDensity; f.detail /= maxDetail; });
+  _patternFeatures = raw;
+  return _patternFeatures;
+}
+
 function drawMotif(ctx, w, h, fg, index, isInverted, lineWidth) {
   const pat = REAL_PATTERNS[index];
   if (!pat) return;

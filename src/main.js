@@ -179,7 +179,8 @@ processBtn.addEventListener('click', async () => {
         y: (p.y + frameWidthPx) * (W_sample / W)
       }));
       const avg = polygonBoundsAndAvgColor(scaled, imgData, W_sample, H_sample);
-      return avg ? (avg.r + avg.g + avg.b) / (3 * 255) : 0.5;
+      if (!avg) return 0.5;
+      return (avg.r + avg.g + avg.b) / (3 * 255);
     }
   );
 
@@ -302,7 +303,11 @@ downloadImgBtn.addEventListener('click', () => {
 downloadCsvBtn.addEventListener('click', () => {
   if (!lastCounts) return;
   let csv = 'pattern,color,pieces,percent\n';
-  Object.keys(lastCounts.counts).sort().forEach(key => {
+  Object.keys(lastCounts.counts).sort((a, b) => {
+    const ca = lastCounts.counts[a].color, cb = lastCounts.counts[b].color;
+    if (ca !== cb) return ca.localeCompare(cb);
+    return a.localeCompare(b);
+  }).forEach(key => {
     const item = lastCounts.counts[key];
     const pct = lastCounts.total > 0 ? ((item.count / lastCounts.total) * 100).toFixed(1) : '0.0';
     csv += `"${item.pattern}","${item.color}",${item.count},${pct}\n`;
@@ -364,3 +369,5 @@ document.getElementById('showPattern').addEventListener('change', () => {
 document.getElementById('imageFit').addEventListener('change', () => {
   if (sourceImg) processBtn.click();
 });
+
+
