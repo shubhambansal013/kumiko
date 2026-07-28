@@ -28,6 +28,7 @@ let outputCanvas = null;
 let lastCounts = null;
 let lastProcessedTriangles = null;
 let originalColorMap = {};
+let originalColorByPattern = {};
 let userColorOverrides = {};
 let lastRenderParams = null;
 
@@ -241,7 +242,11 @@ processBtn.addEventListener('click', async () => {
   octx.clip();
 
   for (const { t, avg, isPatterned } of processedTriangles) {
-    const hexColor = rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b));
+    const rawHex = rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b)).toUpperCase();
+    const patternKey = t.pattern > 0 ? "Pattern " + t.pattern : "Flat/None";
+    const combKey = t.pattern > 0 ? (patternKey + "_" + rawHex) : "Flat/None";
+    
+    const hexColor = (t.pattern > 0 && userColorOverrides[patternKey]) ? userColorOverrides[patternKey] : rawHex;
     const v = t.vertices;
 
     octx.save();
@@ -268,9 +273,7 @@ processBtn.addEventListener('click', async () => {
     }
     octx.restore();
 
-    const patternKey = pNum > 0 ? "Pattern " + pNum : "Flat/None";
-    const colorKey = pNum > 0 ? hexColor.toUpperCase() : "N/A";
-    const combKey = pNum > 0 ? (patternKey + "_" + colorKey) : "Flat/None";
+    const colorKey = pNum > 0 ? rawHex : "N/A";
 
     if (!counts[combKey]) {
       counts[combKey] = { pattern: patternKey, color: colorKey, count: 0 };
@@ -316,6 +319,17 @@ processBtn.addEventListener('click', async () => {
     }
   });
 
+  // Also store first color per pattern for reset reference
+  originalColorByPattern = {};
+  Object.keys(counts).forEach(key => {
+    if (counts[key].color !== "N/A") {
+      const patternKey = key.split('_')[0];
+      if (!originalColorByPattern[patternKey]) {
+        originalColorByPattern[patternKey] = counts[key].color.toUpperCase();
+      }
+    }
+  });
+
   lastRenderParams = {
     sizeA, sizeB, pitch, mitsuke, frameWidthMM, frameColor, jigumiColor, backfillColor,
     backfillOpacity: parseFloat(document.getElementById('backfillOpacity').value) || 0.5,
@@ -334,7 +348,16 @@ processBtn.addEventListener('click', async () => {
 function handleColorChange(key, newColor) {
   if (!lastProcessedTriangles || !lastRenderParams || !outputCanvas) return;
 
-  userColorOverrides[key] = newColor.toUpperCase();
+  // Extract patternKey from combKey (e.g., "Pattern 1_#FF0000" -> "Pattern 1")
+  const patternKey = key.includes('_') ? key.split('_')[0] : key;
+  const color = newColor.toUpperCase();
+  
+  // Store override by patternKey
+  if (color === originalColorByPattern[patternKey]) {
+    delete userColorOverrides[patternKey];
+  } else {
+    userColorOverrides[patternKey] = color;
+  }
 
   const octx = outputCanvas.getContext('2d');
   const { W, H, frameWidthPx, innerWpx, innerHpx, showImage, showPattern, backfillColor, backfillOpacity, patternLinePx, jigumiColor, frameColor, mitsukePx } = lastRenderParams;
@@ -376,14 +399,14 @@ function handleColorChange(key, newColor) {
     const isInverted = t.isInverted;
     const v = t.vertices;
 
-    const patternKey = pNum > 0 ? "Pattern " + pNum : "Flat/None";
-    const combKey = pNum > 0 ? (patternKey + "_" + rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b)).toUpperCase()) : "Flat/None";
+    const patternKey2 = pNum > 0 ? "Pattern " + pNum : "Flat/None";
+    const rawHex = rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b)).toUpperCase();
 
     let hexColor;
-    if (pNum > 0 && userColorOverrides[combKey]) {
-      hexColor = userColorOverrides[combKey];
+    if (pNum > 0 && userColorOverrides[patternKey2]) {
+      hexColor = userColorOverrides[patternKey2];
     } else {
-      hexColor = rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b));
+      hexColor = rawHex;
     }
 
     octx.save();
@@ -416,51 +439,6 @@ function handleColorChange(key, newColor) {
   }
 
   octx.restore();
-
-  const resultsEl = document.getElementById('results');
-  const rows = resultsEl.querySelectorAll('tbody tr');
-  rows.forEach(row => {
-    const colorCell = row.querySelector('.color-input-group');
-    if (colorCell) {
-      const key = colorCell.dataset.key;
-      if (key) {
-        const picker = colorCell.querySelector('.result-color-picker');
-        const hexInput = colorCell.querySelector('.result-color-hex');
-        const resetBtn = colorCell.querySelector('.reset-color-btn');
-        const defaultColor = originalColorMap[key];
-        const currentColor = userColorOverrides[key] || defaultColor;
-        const isDefault = !userColorOverrides[key];
-
-        if (picker) picker.value = currentColor;
-        if (hexInput) hexInput.value = currentColor;
-        if (resetBtn && isDefault) {
-          resetBtn.remove();
-        } else if (!resetBtn && !isDefault) {
-          const newResetBtn = document.createElement('button');
-          newResetBtn.type = 'button';
-          newResetBtn.className = 'reset-color-btn';
-          newResetBtn.dataset.key = key;
-          newResetBtn.title = 'Reset to default';
-          newResetBtn.textContent = '↩';
-          newResetBtn.style.cssText = 'background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.75rem;padding:0;margin-left:4px;';
-          hexInput.parentElement.appendChild(newResetBtn);
-          newResetBtn.addEventListener('click', (e) => {
-            const group = e.target.closest('.color-input-group');
-            const k = group.dataset.key;
-            const dColor = originalColorMap[k];
-            if (!dColor) return;
-            const p = group.querySelector('.result-color-picker');
-            const h = group.querySelector('.result-color-hex');
-            p.value = dColor;
-            h.value = dColor;
-            e.target.remove();
-            delete userColorOverrides[k];
-            if (colorChangeCallback) colorChangeCallback(k, dColor);
-          });
-        }
-      }
-    }
-  });
 
   const wrap = canvasArea.querySelector('.canvas-wrap');
   applyZoomStyle(outputCanvas, wrap);
