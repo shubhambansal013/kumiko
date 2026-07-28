@@ -457,9 +457,7 @@ const REAL_PATTERNS = [
   {
     "w": 288.075,
     "h": 249.628,
-    "paths": [
-      "M.037 249.12 144.037 0l.293.212L288.075 249.48l-.33.148L0 249.48m78.472-45.355 65.565-113.489m.043 0 65.501 113.526m-.021.037-131.067-.037M91.666 90.603l104.828.067m39.302 68.153-52.472 90.751m-78.674-.04-52.356-90.818M99.99 76.203l88.2.067m55.915 96.962-44.159 76.35m-111.928-.057-44.043-76.418"
-    ]
+    "paths": []
   },
   {
     "w": 288.359,
@@ -780,6 +778,100 @@ const patternDarknesses = REAL_PATTERNS.map((p, idx) => {
   return { index: idx, darkness: drawn / (144 * 125) };
 });
 patternDarknesses.sort((a, b) => a.darkness - b.darkness);
+
+function getPatternTransform(patternIndex, columnIndex, triangleIndex, isInverted) {
+  const rotations = [330, 150, 90, 30, 210, 270];
+  const rotationIndex = ((triangleIndex % 6) + (isInverted ? 3 : 0)) % 6;
+  let rotation = rotations[rotationIndex];
+  let scaleY = 1;
+
+  const flippedPatternIndices = [39];
+
+  let offset = [0, 0];
+  if (rotation == 330) {
+    offset = [-62, -33];
+  } else if (rotation == 30) {
+    offset = [65, -33];
+  } else if (rotation == 90) {
+    offset = [0, 5];
+  } else if (rotation == 150) {
+    offset = [65, 39];
+  } else if (rotation == 210) {
+    offset = [-63, 36];
+  } else if (rotation == 270) {
+    offset = [2, 2];
+  }
+
+  if (
+    flippedPatternIndices.includes(patternIndex) &&
+    (columnIndex + triangleIndex) % 2 == 0
+  ) {
+    if (rotation == 330) {
+      rotation = 210;
+      offset = [-63, 216];
+    } else if (rotation == 210) {
+      rotation = 330;
+      offset = [-63, 288];
+    } else if (rotation == 90) {
+      offset = [0, 251];
+    }
+    scaleY = -1;
+  }
+
+  return { rotation, scaleY, offset };
+}
+
+function drawMotifNew(ctx, patternIndex, columnIndex, triangleIndex, isInverted, fg, jigumiColor, chosenThicknessPx, scaleX_canvas, scaleY_canvas) {
+  const pat = REAL_PATTERNS[patternIndex];
+  if (!pat) return;
+
+  const { rotation, scaleY } = getPatternTransform(patternIndex, columnIndex, triangleIndex, isInverted);
+
+  ctx.save();
+
+  // Apply transformations
+  ctx.scale(1, scaleY);
+  ctx.translate(145, 125);
+  ctx.rotate(rotation * Math.PI / 180);
+  ctx.translate(-145, -125);
+
+  ctx.lineWidth = chosenThicknessPx / scaleX_canvas;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  const OUTLINE_PREFIX = "M.037 249.12 144.037 0l.293.212L288.075 249.48l-.33.148L0 249.48";
+
+  pat.paths.forEach(d => {
+    if (d.startsWith(OUTLINE_PREFIX)) {
+      // Draw outer grid triangle in jigumiColor
+      ctx.save();
+      ctx.strokeStyle = jigumiColor || fg;
+      ctx.stroke(new Path2D(OUTLINE_PREFIX));
+      ctx.restore();
+
+      // Only color the central part (the insert piece) with the average color from image
+      let centralPart = d.substring(OUTLINE_PREFIX.length).trim();
+      if (centralPart.length > 0) {
+        if (centralPart.startsWith("m") || centralPart.startsWith("M")) {
+          // It already starts with path command
+        } else {
+          centralPart = "M0 249.48 " + centralPart;
+        }
+        ctx.save();
+        ctx.strokeStyle = fg;
+        ctx.stroke(new Path2D(centralPart));
+        ctx.restore();
+      }
+    } else {
+      ctx.save();
+      ctx.strokeStyle = fg;
+      ctx.stroke(new Path2D(d));
+      ctx.restore();
+    }
+  });
+
+  ctx.restore();
+}
 
 function drawMotif(ctx, w, h, fg, index, isInverted, thicknessPx, isRotatedGrid, jigumiColor) {
   const pat = REAL_PATTERNS[index];
@@ -1122,16 +1214,27 @@ function buildTriangles(innerW, innerH, pitch, flipHalf){
     const left = pointCols[c];
     const right = pointCols[c+1];
     const parityLeft = (c + (flipHalf?1:0)) % 2;
+    let tIdx = 0;
     for(let i=0; i<left.length-1; i++){
       const rIdx = parityLeft === 0 ? i : i+1;
       if(rIdx < 0 || rIdx >= right.length) continue;
       const rightPt = right[rIdx];
       const triLeft = [left[i], left[i+1], rightPt];
-      triangles.push(triLeft);
+      triangles.push({
+        tri: triLeft,
+        columnIndex: c,
+        triangleIndex: tIdx++,
+        isInverted: false
+      });
       const rIdx2 = rIdx + 1;
       if(rIdx2 < right.length && i+1 < left.length){
         const triRight = [left[i+1], rightPt, right[rIdx2]];
-        triangles.push(triRight);
+        triangles.push({
+          tri: triRight,
+          columnIndex: c,
+          triangleIndex: tIdx++,
+          isInverted: true
+        });
       }
     }
   }
@@ -1214,7 +1317,7 @@ processBtn.addEventListener('click', () => {
   console.log("Step 1 pre-processing starting... rawTriangles count:", rawTriangles.length);
   // Step 1: Pre-process raw triangles to collect averages for K-means clustering and determine patterning status
   const processedTriangles = [];
-  rawTriangles.forEach(tri => {
+  rawTriangles.forEach(({ tri, columnIndex, triangleIndex, isInverted }) => {
     const clipped = clipPolygonToRect(tri, innerWpx, innerHpx);
     if (clipped.length < 3) return;
 
@@ -1253,7 +1356,10 @@ processBtn.addEventListener('click', () => {
       clipped,
       avg,
       originalAvg: { r: avg.r, g: avg.g, b: avg.b, stdDev: avg.stdDev },
-      isPatterned
+      isPatterned,
+      columnIndex,
+      triangleIndex,
+      isInverted
     });
   });
 
@@ -1295,7 +1401,7 @@ processBtn.addEventListener('click', () => {
   octx.save();
   octx.translate(frameWidthPx, frameWidthPx);
 
-  processedTriangles.forEach(({ tri, clipped, avg, isPatterned }) => {
+  processedTriangles.forEach(({ tri, clipped, avg, isPatterned, columnIndex, triangleIndex, isInverted }) => {
     // Use dynamic average color (which is now K-means clustered if patterned)
     const hexColor = rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b));
 
@@ -1313,7 +1419,6 @@ processBtn.addEventListener('click', () => {
     const grayscale = (avg.r + avg.g + avg.b) / 3;
     const avgDarkness = (255 - grayscale) / 255;
     const activePatterns = patternDarknesses.filter(p => patternList.includes(p.index + 1));
-    const isInverted = Math.abs(tri[0].x - tri[1].x) < 0.001;
 
     let pNum = 0;
     if (isPatterned && activePatterns.length > 0) {
@@ -1334,7 +1439,44 @@ processBtn.addEventListener('click', () => {
       const opacityVal = parseFloat(document.getElementById('backfillOpacity').value);
       const opacity = isNaN(opacityVal) ? 0.5 : opacityVal;
 
-      paintPatternTile(octx, pNum, minX, minY, Math.max(1,maxX-minX), Math.max(1,maxY-minY), hexColor, backfillColor, isInverted, opacity, thicknessPx, true, jigumiColor);
+      // Draw backfill color inside the clipped triangle!
+      octx.save();
+      let r = 10, g = 9, b = 8; // Default #0a0908
+      if (backfillColor.startsWith('#')) {
+        const hex = backfillColor.slice(1);
+        if (hex.length === 6) {
+          r = parseInt(hex.slice(0, 2), 16);
+          g = parseInt(hex.slice(2, 4), 16);
+          b = parseInt(hex.slice(4, 6), 16);
+        } else if (hex.length === 3) {
+          r = parseInt(hex[0] + hex[0], 16);
+          g = parseInt(hex[1] + hex[1], 16);
+          b = parseInt(hex[2] + hex[2], 16);
+        }
+      }
+      octx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+      octx.fill(); // Fill the clipped triangle area!
+      octx.restore();
+
+      // Now draw the motif absolutely transformed!
+      octx.save();
+      const colH = pitchPx * Math.sqrt(3) / 2;
+      const scaleX_canvas = colH / 255;
+      const scaleY_canvas = (pitchPx / 2) / 146;
+      const parity = (columnIndex + (flipHalf ? 1 : 0)) % 2;
+      const gridYOffset = -2 * pitchPx + parity * (pitchPx / 2);
+
+      const { offset } = getPatternTransform(pNum - 1, columnIndex, triangleIndex, isInverted);
+
+      const tx_canvas = columnIndex * colH + offset[0] * scaleX_canvas;
+      const ty_canvas = triangleIndex * (pitchPx / 2) + gridYOffset + offset[1] * scaleY_canvas;
+
+      octx.translate(tx_canvas, ty_canvas);
+      octx.scale(scaleX_canvas, scaleY_canvas);
+
+      drawMotifNew(octx, pNum - 1, columnIndex, triangleIndex, isInverted, hexColor, jigumiColor, thicknessPx, scaleX_canvas, scaleY_canvas);
+      octx.restore();
+
       totalPatterned++;
     } else {
       totalFlat++;
