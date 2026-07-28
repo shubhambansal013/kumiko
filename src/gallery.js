@@ -26,6 +26,8 @@ export function renderGallery() {
     tile.addEventListener('click', () => {
       if (selectedPatterns.has(i)) selectedPatterns.delete(i); else selectedPatterns.add(i);
       renderGallery();
+      const btn = document.getElementById('processBtn');
+      if (!btn.disabled) btn.click();
     });
     gallery.appendChild(tile);
   }
@@ -35,9 +37,13 @@ export function setupGalleryButtons() {
   document.getElementById('selectAllBtn').addEventListener('click', () => {
     for (let i = 1; i <= NUM_PATTERNS; i++) selectedPatterns.add(i);
     renderGallery();
+    const btn = document.getElementById('processBtn');
+    if (!btn.disabled) btn.click();
   });
   document.getElementById('selectNoneBtn').addEventListener('click', () => {
     selectedPatterns.clear();
     renderGallery();
+    const btn = document.getElementById('processBtn');
+    if (!btn.disabled) btn.click();
   });
 }
