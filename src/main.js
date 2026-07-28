@@ -126,6 +126,7 @@ processBtn.addEventListener('click', async () => {
 
   const frameWidthPx = frameWidthMM * pxPerMM;
   const mitsukePx = Math.max(0.5, mitsuke * pxPerMM);
+  const patternLinePx = mitsukePx * 0.8;
   const innerWpx = innerWidthMM * pxPerMM;
   const innerHpx = innerHeightMM * pxPerMM;
 
@@ -216,7 +217,7 @@ processBtn.addEventListener('click', async () => {
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
       v.forEach(p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); });
 
-      paintPatternTile(octx, pNum, minX, minY, Math.max(1, maxX - minX), Math.max(1, maxY - minY), hexColor, backfillColor, t.isInverted, opacity);
+      paintPatternTile(octx, pNum, minX, minY, Math.max(1, maxX - minX), Math.max(1, maxY - minY), hexColor, backfillColor, t.isInverted, opacity, patternLinePx);
       totalPatterned++;
     } else {
       totalFlat++;

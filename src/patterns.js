@@ -365,7 +365,7 @@ export const REAL_PATTERNS = [
   }
 ];
 
-function drawMotif(ctx, w, h, fg, index, isInverted) {
+function drawMotif(ctx, w, h, fg, index, isInverted, lineWidth) {
   const pat = REAL_PATTERNS[index];
   if (!pat) return;
   ctx.save();
@@ -380,7 +380,7 @@ function drawMotif(ctx, w, h, fg, index, isInverted) {
   ctx.scale(scale, scale);
   ctx.translate(-pat.w / 2, -pat.h / 2);
   ctx.strokeStyle = fg;
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = lineWidth;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   pat.paths.forEach(d => {
@@ -389,7 +389,7 @@ function drawMotif(ctx, w, h, fg, index, isInverted) {
   ctx.restore();
 }
 
-export function paintPatternTile(ctx, index, x0, y0, w, h, fgColor, bgColor, isInverted, opacity) {
+export function paintPatternTile(ctx, index, x0, y0, w, h, fgColor, bgColor, isInverted, opacity, lineWidthPx) {
   ctx.save();
   ctx.translate(x0, y0);
   ctx.globalAlpha = opacity;
@@ -399,11 +399,13 @@ export function paintPatternTile(ctx, index, x0, y0, w, h, fgColor, bgColor, isI
   ctx.beginPath();
   ctx.rect(0, 0, w, h);
   ctx.clip();
-  drawMotif(ctx, w, h, fgColor, index - 1, isInverted);
+  const pat = REAL_PATTERNS[index - 1];
+  const patLineWidth = pat ? lineWidthPx * pat.w / h : lineWidthPx;
+  drawMotif(ctx, w, h, fgColor, index - 1, isInverted, patLineWidth);
   ctx.restore();
 }
 
-export function buildPatternSvg(index, w, h, fgColor, bgColor, isInverted) {
+export function buildPatternSvg(index, w, h, fgColor, bgColor, isInverted, lineWidth) {
   const pat = REAL_PATTERNS[index - 1];
   if (!pat) return '';
 
@@ -417,7 +419,7 @@ export function buildPatternSvg(index, w, h, fgColor, bgColor, isInverted) {
       transforms.push(`translate(${w / 2} ${h / 2}) rotate(180) translate(${-w / 2} ${-h / 2})`);
     }
     transforms.push(`scale(${scaleX} ${scaleY})`);
-    pathsSvg += `<path d="${d}" fill="none" stroke="${fgColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" transform="${transforms.join(' ')}"`;
+    pathsSvg += `<path d="${d}" fill="none" stroke="${fgColor}" stroke-width="${lineWidth}" stroke-linecap="round" stroke-linejoin="round" transform="${transforms.join(' ')}"`;
     pathsSvg += `/>`;
   });
 

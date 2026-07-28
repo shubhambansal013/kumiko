@@ -68,7 +68,7 @@ describe('patterns: REAL_PATTERNS data integrity', () => {
 describe('patterns: buildPatternSvg', () => {
   it('returns valid SVG for every pattern', () => {
     for (let i = 1; i <= NUM_PATTERNS; i++) {
-      const svg = buildPatternSvg(i, 90, 90, '#000000', '#ffffff', false);
+      const svg = buildPatternSvg(i, 90, 90, '#000000', '#ffffff', false, 12);
       expect(svg).toContain('<svg');
       expect(svg).toContain('</svg>');
       expect(svg).toContain('xmlns="http://www.w3.org/2000/svg"');
@@ -78,41 +78,41 @@ describe('patterns: buildPatternSvg', () => {
   });
 
   it('returns empty string for out-of-range index', () => {
-    expect(buildPatternSvg(0, 90, 90, '#000', '#fff', false)).toBe('');
-    expect(buildPatternSvg(47, 90, 90, '#000', '#fff', false)).toBe('');
-    expect(buildPatternSvg(-1, 90, 90, '#000', '#fff', false)).toBe('');
+    expect(buildPatternSvg(0, 90, 90, '#000', '#fff', false, 12)).toBe('');
+    expect(buildPatternSvg(47, 90, 90, '#000', '#fff', false, 12)).toBe('');
+    expect(buildPatternSvg(-1, 90, 90, '#000', '#fff', false, 12)).toBe('');
   });
 
   it('includes viewBox with correct dimensions', () => {
-    const svg = buildPatternSvg(1, 100, 80, '#000', '#fff', false);
+    const svg = buildPatternSvg(1, 100, 80, '#000', '#fff', false, 12);
     expect(svg).toContain('viewBox="0 0 100 80"');
     expect(svg).toContain('width="100"');
     expect(svg).toContain('height="80"');
   });
 
   it('inverted flag adds rotate(180) transform', () => {
-    const normal = buildPatternSvg(1, 90, 90, '#000', '#fff', false);
-    const inverted = buildPatternSvg(1, 90, 90, '#000', '#fff', true);
+    const normal = buildPatternSvg(1, 90, 90, '#000', '#fff', false, 12);
+    const inverted = buildPatternSvg(1, 90, 90, '#000', '#fff', true, 12);
     expect(inverted).toContain('rotate(180)');
     expect(normal).not.toContain('rotate(180)');
   });
 
   it('uses provided colors', () => {
-    const svg = buildPatternSvg(1, 90, 90, '#ff0000', '#00ff00', false);
+    const svg = buildPatternSvg(1, 90, 90, '#ff0000', '#00ff00', false, 12);
     expect(svg).toContain('stroke="#ff0000"');
     expect(svg).toContain('fill="rgba(0,255,0,1)"');
   });
 
   it('produces different SVGs for different patterns', () => {
-    const svg1 = buildPatternSvg(1, 90, 90, '#000', '#fff', false);
-    const svg2 = buildPatternSvg(2, 90, 90, '#000', '#fff', false);
+    const svg1 = buildPatternSvg(1, 90, 90, '#000', '#fff', false, 12);
+    const svg2 = buildPatternSvg(2, 90, 90, '#000', '#fff', false, 12);
     expect(svg1).not.toBe(svg2);
   });
 
   it('scaling factor matches tile dimensions', () => {
     const pat = REAL_PATTERNS[0];
     const w = 50, h = 43.3;
-    const svg = buildPatternSvg(1, w, h, '#000', '#fff', false);
+    const svg = buildPatternSvg(1, w, h, '#000', '#fff', false, 12);
     const expectedScaleX = w / pat.w;
     const expectedScaleY = h / pat.h;
     expect(svg).toContain(`scale(${expectedScaleX} ${expectedScaleY})`);
@@ -134,7 +134,7 @@ describe('patterns: buildPatternSvg centering', () => {
 
   it('scaled pattern fits exactly within viewBox for square tiles', () => {
     for (let i = 1; i <= NUM_PATTERNS; i++) {
-      const svg = buildPatternSvg(i, 90, 90, '#000', '#fff', false);
+      const svg = buildPatternSvg(i, 90, 90, '#000', '#fff', false, 12);
       const [sx, sy] = parseScale(svg);
       const [vw, vh] = parseViewBox(svg);
       const pat = REAL_PATTERNS[i - 1];
@@ -153,7 +153,7 @@ describe('patterns: buildPatternSvg centering', () => {
     const sizes = [[50, 43.3], [100, 80], [30, 30]];
     for (const [w, h] of sizes) {
       for (let i = 1; i <= NUM_PATTERNS; i++) {
-        const svg = buildPatternSvg(i, w, h, '#000', '#fff', false);
+        const svg = buildPatternSvg(i, w, h, '#000', '#fff', false, 12);
         const [sx, sy] = parseScale(svg);
         const [vw, vh] = parseViewBox(svg);
         const pat = REAL_PATTERNS[i - 1];
@@ -164,7 +164,7 @@ describe('patterns: buildPatternSvg centering', () => {
   });
 
   it('no extra translate in non-inverted SVG (content anchored at origin)', () => {
-    const svg = buildPatternSvg(1, 90, 90, '#000', '#fff', false);
+    const svg = buildPatternSvg(1, 90, 90, '#000', '#fff', false, 12);
     // non-inverted should only have scale, no translate for centering
     expect(svg).not.toMatch(/translate\(/);
     expect(svg).toContain('scale(');
