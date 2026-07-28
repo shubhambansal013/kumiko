@@ -365,69 +365,38 @@ export const REAL_PATTERNS = [
   }
 ];
 
-function analyzePath(pathStr) {
-  let totalLen = 0, segCount = 0;
-  let cx = 0, cy = 0, sx = 0, sy = 0;
-  let cmd = '', curNum = '';
-  let nums = [];
-  function flush() { if (curNum !== '') { nums.push(parseFloat(curNum)); curNum = ''; } }
-  function exec() {
-    if (nums.length < 2) { nums = []; return; }
-    if (cmd === 'z' || cmd === 'Z') { totalLen += Math.hypot(cx - sx, cy - sy); cx = sx; cy = sy; nums = []; return; }
-    const rel = cmd === cmd.toLowerCase() && cmd !== 'z';
-    const move = cmd === 'm' || cmd === 'M';
-    let k = 0;
-    while (k + 1 < nums.length) {
-      const nx = rel ? cx + nums[k] : nums[k];
-      const ny = rel ? cy + nums[k + 1] : nums[k + 1];
-      if (move && k === 0) { sx = nx; sy = ny; }
-      else { totalLen += Math.hypot(nx - cx, ny - cy); segCount++; }
-      cx = nx; cy = ny;
-      k += 2;
-    }
-    nums = [];
-  }
-  for (const ch of pathStr) {
-    if (/[MmLlCcQqAaZz]/.test(ch)) { flush(); if (cmd) exec(); cmd = ch; }
-    else if (/[-\d.eE]/.test(ch)) { curNum += ch; }
-    else { flush(); }
-  }
-  flush();
-  if (cmd) exec();
-  return { totalLen, segCount };
-}
-
 let _patternFeatures = null;
+
+function countSvgCommands(pathStr) {
+  return (pathStr.match(/[MmLlCcQqAaSsTtHhVvZz]/g) || []).length;
+}
 
 export function getPatternFeatures() {
   if (_patternFeatures) return _patternFeatures;
+  const W = 288, H = 250;
   const canvas = document.createElement('canvas');
-  canvas.width = 144; canvas.height = 125;
-  const ctx = canvas.getContext('2d');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   ctx.strokeStyle = '#000';
   ctx.lineWidth = 1;
 
   const raw = REAL_PATTERNS.map((p, idx) => {
-    ctx.clearRect(0, 0, 144, 125);
+    ctx.clearRect(0, 0, W, H);
     p.paths.forEach(d => ctx.stroke(new Path2D(d)));
-    const data = ctx.getImageData(0, 0, 144, 125).data;
-    let drawn = 0;
-    for (let i = 3; i < data.length; i += 4) if (data[i] > 0) drawn++;
-    const density = drawn / (144 * 125);
+    const data = ctx.getImageData(0, 0, W, H).data;
+    let inkPixels = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] > 0) inkPixels++;
+    const density = inkPixels / (W * H);
 
-    let totalLen = 0, totalSeg = 0;
-    p.paths.forEach(d => {
-      const r = analyzePath(d);
-      totalLen += r.totalLen;
-      totalSeg += r.segCount;
-    });
-    // Detail combines path length (longer = more complex) and segment count (more strokes = more intricate)
-    const detail = totalLen * 0.4 + totalSeg * 20;
+    // Detail: count of SVG drawing commands across all paths
+    let commands = 0;
+    p.paths.forEach(d => { commands += countSvgCommands(d); });
+    const detail = commands;
 
     return { index: idx, density, detail };
   });
 
-  const maxDensity = Math.max(...raw.map(f => f.density));
+  const maxDensity = Math.max(...raw.map(f => f.density)) || 1;
   const maxDetail = Math.max(...raw.map(f => f.detail)) || 1;
   raw.forEach(f => { f.density /= maxDensity; f.detail /= maxDetail; });
   _patternFeatures = raw;
