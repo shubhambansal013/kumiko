@@ -105,8 +105,8 @@ processBtn.addEventListener('click', async () => {
 
   const patternName = "Kumiko Pattern Map";
 
-  const innerWidthMM = sizeB * pitch;
-  const innerHeightMM = sizeA * pitch * Math.sqrt(3) / 2;
+  const innerWidthMM = sizeB * pitch * 2 / Math.sqrt(3);
+  const innerHeightMM = sizeA * pitch;
   const panelWidthMM = innerWidthMM + frameWidthMM * 2;
   const panelHeightMM = innerHeightMM + frameWidthMM * 2;
 
@@ -191,6 +191,9 @@ processBtn.addEventListener('click', async () => {
 
   octx.save();
   octx.translate(frameWidthPx, frameWidthPx);
+  octx.beginPath();
+  octx.rect(0, 0, innerWpx, innerHpx);
+  octx.clip();
 
   for (const { t, avg, isPatterned } of processedTriangles) {
     const hexColor = rgbToHex(Math.round(avg.r), Math.round(avg.g), Math.round(avg.b));

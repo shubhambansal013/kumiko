@@ -9,9 +9,12 @@ export function assignPattern(lightness, activePatterns) {
  * Generate a proper equilateral-triangle asanoha lattice.
  *
  * Geometry (equilateral triangles with side = pitch):
- *   horizontal vertex spacing = pitch
- *   vertical vertex spacing   = pitch * sqrt(3) / 2
- *   odd rows offset by pitch / 2
+ *   horizontal vertex spacing = pitch * 2/sqrt(3)
+ *   vertical vertex spacing   = pitch
+ *   odd rows offset by pitchX / 2
+ *
+ * Odd rows include an extra vertex at -pitchX/2 so left-edge triangles
+ * are complete; the rendering clips to the inner area.
  *
  * @param {number} innerW  – inner panel width in px (after frame)
  * @param {number} innerH  – inner panel height in px (after frame)
@@ -24,20 +27,27 @@ export function assignPattern(lightness, activePatterns) {
 export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatterns, getLightnessAt) {
   const pitchX = innerW / numCols;
   const h = innerH / numRows;
-  const pitch = (2 * h) / Math.sqrt(3);
 
-  const cols = numCols + 1;
   const rows = numRows + 1;
 
   const vertices = [];
   for (let row = 0; row < rows; row++) {
     vertices[row] = [];
-    const offsetX = (row % 2 === 1) ? pitchX / 2 : 0;
-    for (let col = 0; col < cols; col++) {
-      vertices[row][col] = {
-        x: col * pitchX + offsetX,
-        y: row * h,
-      };
+    const isOdd = row % 2 === 1;
+    if (isOdd) {
+      for (let col = 0; col <= numCols + 1; col++) {
+        vertices[row][col] = {
+          x: col * pitchX - pitchX / 2,
+          y: row * h,
+        };
+      }
+    } else {
+      for (let col = 0; col <= numCols; col++) {
+        vertices[row][col] = {
+          x: col * pitchX,
+          y: row * h,
+        };
+      }
     }
   }
 
@@ -46,90 +56,90 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
   for (let row = 0; row < numRows; row++) {
     const isOdd = row % 2 === 1;
 
-    const colsStart = isOdd ? 0 : 0;
-    const colsEnd = isOdd ? numCols : numCols;
+    if (!isOdd) {
+      for (let c = 0; c < numCols; c++) {
+        const top = vertices[row];
+        const bot = vertices[row + 1];
 
-    for (let col = colsStart; col < colsEnd; col++) {
-      if (!isOdd) {
-        if (col < numCols) {
-          const a = vertices[row][col];
-          const b = vertices[row][col + 1];
-          const c = vertices[row + 1][col];
-
-          const cx = (a.x + b.x + c.x) / 3;
-          const cy = (a.y + b.y + c.y) / 3;
+        {
+          const a = top[c];
+          const b = top[c + 1];
+          const d = bot[c + 1];
+          const cx = (a.x + b.x + d.x) / 3;
+          const cy = (a.y + b.y + d.y) / 3;
           const lightness = getLightnessAt(cx, cy);
           const pattern = assignPattern(lightness, activePatterns);
-
           triangles.push({
-            vertices: [a, b, c],
+            vertices: [a, b, d],
             center: { x: cx, y: cy },
-            col, row,
+            col: c, row,
             isInverted: false,
             lightness,
             pattern,
           });
         }
 
-        if (col > 0) {
-          const a = vertices[row][col];
-          const b = vertices[row + 1][col];
-          const c = vertices[row + 1][col - 1];
-
-          const cx = (a.x + b.x + c.x) / 3;
-          const cy = (a.y + b.y + c.y) / 3;
+        {
+          const a = top[c];
+          const d = bot[c];
+          const e = bot[c + 1];
+          const cx = (a.x + d.x + e.x) / 3;
+          const cy = (a.y + d.y + e.y) / 3;
           const lightness = getLightnessAt(cx, cy);
           const pattern = assignPattern(lightness, activePatterns);
-
           triangles.push({
-            vertices: [a, b, c],
+            vertices: [a, d, e],
             center: { x: cx, y: cy },
-            col, row,
+            col: c, row,
             isInverted: true,
             lightness,
             pattern,
           });
         }
-      } else {
-        if (col < numCols) {
-          const a = vertices[row][col];
-          const b = vertices[row + 1][col];
-          const c = vertices[row + 1][col + 1];
+      }
+    } else {
+      for (let c = 0; c <= numCols; c++) {
+        const top = vertices[row];
+        const bot = vertices[row + 1];
 
-          const cx = (a.x + b.x + c.x) / 3;
-          const cy = (a.y + b.y + c.y) / 3;
+        if (c <= numCols) {
+          const a = top[c];
+          const b = top[c + 1];
+          const d = bot[c];
+          const cx = (a.x + b.x + d.x) / 3;
+          const cy = (a.y + b.y + d.y) / 3;
           const lightness = getLightnessAt(cx, cy);
           const pattern = assignPattern(lightness, activePatterns);
-
           triangles.push({
-            vertices: [a, b, c],
+            vertices: [a, b, d],
             center: { x: cx, y: cy },
-            col, row,
-            isInverted: false,
-            lightness,
-            pattern,
-          });
-        }
-
-        if (col < numCols) {
-          const a = vertices[row][col + 1];
-          const b = vertices[row][col];
-          const c = vertices[row + 1][col + 1];
-
-          const cx = (a.x + b.x + c.x) / 3;
-          const cy = (a.y + b.y + c.y) / 3;
-          const lightness = getLightnessAt(cx, cy);
-          const pattern = assignPattern(lightness, activePatterns);
-
-          triangles.push({
-            vertices: [a, b, c],
-            center: { x: cx, y: cy },
-            col, row,
+            col: c, row,
             isInverted: true,
             lightness,
             pattern,
           });
         }
+      }
+
+      for (let c = 0; c < numCols; c++) {
+        const top = vertices[row];
+        const bot = vertices[row + 1];
+
+        const a = bot[c];
+        const b = bot[c + 1];
+        const d = top[c + 1];
+        const cx = (a.x + b.x + d.x) / 3;
+        const cy = (a.y + b.y + d.y) / 3;
+        const lightness = getLightnessAt(cx, cy);
+        const pattern = assignPattern(lightness, activePatterns);
+        triangles.push({
+          vertices: [a, b, d],
+          center: { x: cx, y: cy },
+          col: c, row,
+          isInverted: false,
+          lightness,
+          pattern,
+        });
       }
     }
   }
