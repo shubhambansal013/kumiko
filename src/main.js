@@ -130,6 +130,7 @@ processBtn.addEventListener('click', async () => {
   const patternLinePx = mitsukePx * 0.8;
   const innerWpx = innerWidthMM * pxPerMM;
   const innerHpx = innerHeightMM * pxPerMM;
+  const s = W_sample / W;
 
   processingDebug('dimensions', { innerWpx, innerHpx, W, H, W_sample, H_sample, pxPerMM, frameWidthPx, patternLinePx, s });
 
@@ -138,7 +139,6 @@ processBtn.addEventListener('click', async () => {
   const sctx = srcCanvas.getContext('2d');
   const fitMode = document.getElementById('imageFit').value;
   const r = getImageCrop(sourceImg.naturalWidth, sourceImg.naturalHeight, innerWpx, innerHpx, fitMode);
-  const s = W_sample / W;
   sctx.fillStyle = '#ffffff';
   sctx.fillRect(0, 0, W_sample, H_sample);
   sctx.drawImage(sourceImg, r.sx, r.sy, r.sw, r.sh, (frameWidthPx + r.dx) * s, (frameWidthPx + r.dy) * s, r.dw * s, r.dh * s);
