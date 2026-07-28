@@ -28,11 +28,12 @@ export function assignPattern(lightness, activePatterns) {
 export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatterns, getLightnessAt) {
   const pitchX = innerW / numCols;
   const h = innerH / numRows;
+  const flipFirst = numCols % 2 === 0;
 
   const vertices = [];
   for (let col = 0; col <= numCols; col++) {
     vertices[col] = [];
-    const isOdd = col % 2 === 1;
+    const isOdd = (col % 2 === 1) !== flipFirst;
     if (isOdd) {
       for (let row = 0; row <= numRows + 1; row++) {
         vertices[col][row] = {
@@ -53,7 +54,7 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
   const triangles = [];
 
   for (let col = 0; col < numCols; col++) {
-    const isOdd = col % 2 === 1;
+    const isOdd = (col % 2 === 1) !== flipFirst;
 
     if (!isOdd) {
       for (let k = 0; k < numRows; k++) {
