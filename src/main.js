@@ -158,13 +158,13 @@ processBtn.addEventListener('click', async () => {
   const gridTriangles = generateLockedGrid(
     innerWpx, innerHpx, sizeB, sizeA,
     activePatterns,
-    (cx, cy) => {
-      const sx = (cx + frameWidthPx) * (W_sample / W);
-      const sy = (cy + frameWidthPx) * (W_sample / W);
-      const px = Math.min(W_sample - 1, Math.max(0, Math.round(sx)));
-      const py = Math.min(H_sample - 1, Math.max(0, Math.round(sy)));
-      const idx = (py * W_sample + px) * 4;
-      return (imgData[idx] + imgData[idx + 1] + imgData[idx + 2]) / (3 * 255);
+    (vertices) => {
+      const scaled = vertices.map(p => ({
+        x: (p.x + frameWidthPx) * (W_sample / W),
+        y: (p.y + frameWidthPx) * (W_sample / W)
+      }));
+      const avg = polygonBoundsAndAvgColor(scaled, imgData, W_sample, H_sample);
+      return avg ? (avg.r + avg.g + avg.b) / (3 * 255) : 0.5;
     }
   );
 

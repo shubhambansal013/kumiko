@@ -23,7 +23,7 @@ export function assignPattern(lightness, activePatterns) {
  * @param {number} numCols – Size B: number of triangles horizontally
  * @param {number} numRows – Size A: number of triangles vertically
  * @param {Array}  activePatterns – selected pattern indices
- * @param {Function} getLightnessAt – (cx, cy) → 0..1
+ * @param {Function} getLightnessAt – (vertices) → 0..1 where vertices = [{x,y},...]
  * @returns {Array} triangles
  */
 export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatterns, getLightnessAt) {
@@ -68,7 +68,7 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
           const d = right[k + 1];
           const cx = (a.x + b.x + d.x) / 3;
           const cy = (a.y + b.y + d.y) / 3;
-          const lightness = getLightnessAt(cx, cy);
+          const lightness = getLightnessAt([a, b, d]);
           const pattern = assignPattern(lightness, activePatterns);
           triangles.push({
             vertices: [a, b, d],
@@ -91,7 +91,7 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
           const d = left[k];
           const cx = (a.x + b.x + d.x) / 3;
           const cy = (a.y + b.y + d.y) / 3;
-          const lightness = getLightnessAt(cx, cy);
+          const lightness = getLightnessAt([a, b, d]);
           const pattern = assignPattern(lightness, activePatterns);
           triangles.push({
             vertices: [a, b, d],
@@ -114,7 +114,7 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
           const d = right[k];
           const cx = (a.x + b.x + d.x) / 3;
           const cy = (a.y + b.y + d.y) / 3;
-          const lightness = getLightnessAt(cx, cy);
+          const lightness = getLightnessAt([a, b, d]);
           const pattern = assignPattern(lightness, activePatterns);
           triangles.push({
             vertices: [a, b, d],
@@ -137,7 +137,7 @@ export function generateLockedGrid(innerW, innerH, numCols, numRows, activePatte
           const d = left[k + 1];
           const cx = (a.x + b.x + d.x) / 3;
           const cy = (a.y + b.y + d.y) / 3;
-          const lightness = getLightnessAt(cx, cy);
+          const lightness = getLightnessAt([a, b, d]);
           const pattern = assignPattern(lightness, activePatterns);
           triangles.push({
             vertices: [a, b, d],
