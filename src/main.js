@@ -13,7 +13,7 @@ const processBtn = document.getElementById('processBtn');
 const canvasArea = document.getElementById('canvasArea');
 const resultsEl = document.getElementById('results');
 const downloadImgBtn = document.getElementById('downloadImgBtn');
-const downloadCsvBtn = document.getElementById('downloadCsvBtn');
+const downloadTxtBtn = document.getElementById('downloadTxtBtn');
 const zoomSlider = document.getElementById('zoomSlider');
 const zoomInBtn = document.getElementById('zoomInBtn');
 const zoomOutBtn = document.getElementById('zoomOutBtn');
@@ -357,7 +357,7 @@ processBtn.addEventListener('click', async () => {
 
   setColorChangeCallback(handleColorChange);
 
-  renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, currentZoomLevel, downloadImgBtn, downloadCsvBtn, userColorOverrides, originalColorMap });
+  renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, currentZoomLevel, downloadImgBtn, downloadTxtBtn, userColorOverrides, originalColorMap });
 });
 
 function handleColorChange(combKey, newColor) {
@@ -462,9 +462,6 @@ function handleColorChange(combKey, newColor) {
 
   const wrap = canvasArea.querySelector('.canvas-wrap');
   applyZoomStyle(outputCanvas, wrap);
-
-  // Re-render results table to update UI (color inputs, reset buttons)
-  renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, currentZoomLevel, downloadImgBtn, downloadCsvBtn, userColorOverrides, originalColorMap, originalColorByPattern });
 }
 
 downloadImgBtn.addEventListener('click', () => {
@@ -475,21 +472,72 @@ downloadImgBtn.addEventListener('click', () => {
   a.click();
 });
 
-downloadCsvBtn.addEventListener('click', () => {
+downloadTxtBtn.addEventListener('click', () => {
   if (!lastCounts) return;
-  let csv = 'pattern,color,pieces,percent\n';
-  Object.keys(lastCounts.counts).sort((a, b) => {
-    const ca = lastCounts.counts[a].color, cb = lastCounts.counts[b].color;
+
+  const counts = lastCounts.counts;
+  const effectiveColor = (combKey) => {
+    const item = counts[combKey];
+    return (userColorOverrides[combKey] || item.color).toUpperCase();
+  };
+
+  const lines = [];
+  const push = (line = '') => lines.push(line);
+
+  push('KUMIKO COLOR MAP');
+  push('================');
+  push('Generated: ' + new Date().toLocaleString());
+  push('');
+
+  push('--- Frame settings ---');
+  push(`Width (triangles): ${lastCounts.sizeB}`);
+  push(`Height (triangles): ${lastCounts.sizeA}`);
+  push(`Frame width (mm): ${lastCounts.frameWidthMM}`);
+  push(`Frame color: ${document.getElementById('frameColor').value.toUpperCase()}`);
+  push('');
+
+  push('--- Jigumi settings ---');
+  push(`Pitch (mm): ${lastCounts.pitch}`);
+  push(`Mitsuke (mm): ${lastCounts.mitsuke}`);
+  push(`Jigumi (grid line) color: ${document.getElementById('jigumiColor').value.toUpperCase()}`);
+  push('');
+
+  push('--- Insert settings ---');
+  push(`Backfill color: ${document.getElementById('backfillColor').value.toUpperCase()}`);
+  push(`Backfill opacity: ${document.getElementById('backfillOpacity').value}`);
+  push(`Pattern thickness (mm): ${document.getElementById('patternThickness').value || lastCounts.mitsuke}`);
+  push(`Number of insert colors: ${document.getElementById('numInsertColors').value}`);
+  push(`Patterns selected: ${[...selectedPatterns].sort((a, b) => a - b).join(', ') || 'none'}`);
+  push('');
+
+  push('--- Visibility ---');
+  push(`Image fit: ${document.getElementById('imageFit').value}`);
+  push(`Show original image: ${document.getElementById('showImage').checked}`);
+  push(`Show Kumiko pattern: ${document.getElementById('showPattern').checked}`);
+  push('');
+
+  push('--- Panel ---');
+  push(`Panel size (mm): ${lastCounts.panelWidthMM} x ${lastCounts.panelHeightMM}`);
+  push(`Total triangles: ${lastCounts.total}`);
+  push(`Patterned pieces: ${lastCounts.totalPatterned}`);
+  push(`Flat/Empty pieces: ${lastCounts.totalFlat}`);
+  push('');
+
+  push('--- Piece counts ---');
+  push('Pattern\tColor\tPieces\t% of panel');
+  Object.keys(counts).sort((a, b) => {
+    const ca = effectiveColor(a), cb = effectiveColor(b);
     if (ca !== cb) return ca.localeCompare(cb);
     return a.localeCompare(b);
-  }).forEach(key => {
-    const item = lastCounts.counts[key];
+  }).forEach(combKey => {
+    const item = counts[combKey];
     const pct = lastCounts.total > 0 ? ((item.count / lastCounts.total) * 100).toFixed(1) : '0.0';
-    csv += `"${item.pattern}","${item.color}",${item.count},${pct}\n`;
+    push(`${item.pattern}\t${effectiveColor(combKey)}\t${item.count}\t${pct}%`);
   });
-  const blob = new Blob([csv], { type: 'text/csv' });
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
   const a = document.createElement('a');
-  a.download = 'kumiko-piece-count.csv';
+  a.download = 'kumiko-color-map.txt';
   a.href = URL.createObjectURL(blob);
   a.click();
 });

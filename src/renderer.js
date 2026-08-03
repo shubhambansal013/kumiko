@@ -50,7 +50,7 @@ function createColorInputGroup(combKey, patternKey, color, defaultColor, userOve
   </div>`;
 }
 
-export function renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, currentZoomLevel, downloadImgBtn, downloadCsvBtn, userColorOverrides = {}, originalColorMap = {} }) {
+export function renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, currentZoomLevel, downloadImgBtn, downloadTxtBtn, userColorOverrides = {}, originalColorMap = {} }) {
   canvasArea.innerHTML = '';
   const wrap = document.createElement('div');
   wrap.className = 'canvas-wrap';
@@ -101,10 +101,26 @@ export function renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, 
 
   resultsEl.innerHTML = html;
   downloadImgBtn.style.display = 'block';
-  downloadCsvBtn.style.display = 'block';
+  downloadTxtBtn.style.display = 'block';
 
   function getCombKey(group) {
     return group.dataset.comb;
+  }
+
+  function handleResetClick(btn) {
+    const group = btn.closest('.color-input-group');
+    const combKey = group.dataset.comb;
+    const defaultColor = originalColorMap[combKey]?.toUpperCase();
+    if (!defaultColor) return;
+
+    const picker = group.querySelector('.result-color-picker');
+    const hexInput = group.querySelector('.result-color-hex');
+
+    picker.value = defaultColor;
+    hexInput.value = defaultColor;
+    btn.remove();
+
+    if (colorChangeCallback) colorChangeCallback(combKey, defaultColor);
   }
 
   function updateResetBtn(group, isDefault) {
@@ -119,6 +135,7 @@ export function renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, 
       newResetBtn.textContent = '↩';
       newResetBtn.style.cssText = 'background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.75rem;padding:0;margin-left:4px;';
       group.querySelector('.result-color-hex').parentElement.appendChild(newResetBtn);
+      newResetBtn.addEventListener('click', () => handleResetClick(newResetBtn));
     } else if (isDefault && resetBtn) {
       resetBtn.remove();
     }
@@ -164,21 +181,7 @@ export function renderOutput({ canvasArea, resultsEl, outputCanvas, lastCounts, 
   });
 
   resultsEl.querySelectorAll('.reset-color-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const group = e.target.closest('.color-input-group');
-      const combKey = group.dataset.comb;
-      const defaultColor = originalColorMap[combKey]?.toUpperCase();
-      if (!defaultColor) return;
-
-      const picker = group.querySelector('.result-color-picker');
-      const hexInput = group.querySelector('.result-color-hex');
-
-      picker.value = defaultColor;
-      hexInput.value = defaultColor;
-      e.target.remove();
-
-      if (colorChangeCallback) colorChangeCallback(combKey, defaultColor);
-    });
+    btn.addEventListener('click', () => handleResetClick(btn));
   });
 
   const resetAllBtn = resultsEl.querySelector('#resetAllColorsBtn');
